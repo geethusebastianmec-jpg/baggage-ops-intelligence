@@ -1,0 +1,80 @@
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: baggage_redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --smp 1
+      - --memory 512M
+      - --mode dev-container
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"   # external Kafka API
+      - "18082:18082"   # Pandaproxy REST
+      - "18081:18081"   # Schema Registry
+      - "9644:9644"     # Admin API
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+  redpanda_console:
+    image: redpandadata/console:latest
+    container_name: baggage_console
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    ports:
+      - "8080:8080"   # Redpanda Console UI
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: baggage_postgres
+    environment:
+      POSTGRES_USER: baggage
+      POSTGRES_PASSWORD: baggage
+      POSTGRES_DB: baggage_ops
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U baggage -d baggage_ops"]
+      interval: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: baggage_redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redpanda_data:
+  postgres_data:
+  redis_data:

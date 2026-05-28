@@ -1,0 +1,39 @@
+# Agent framework
+langgraph==0.2.70
+langgraph-supervisor==0.0.27
+langgraph-checkpoint-postgres==2.0.13
+
+# LLM provider
+langchain-anthropic==0.3.15
+langchain-core==0.3.65
+
+# Event bus
+confluent-kafka==2.6.1
+
+# State stores
+redis==5.2.1
+psycopg2-binary==2.9.10
+
+# Vector store (episodic memory)
+qdrant-client==1.13.3
+
+# API layer
+fastapi==0.115.12
+uvicorn[standard]==0.30.6
+websockets==13.1
+
+# Demo UI
+streamlit==1.40.2
+
+# Data models
+pydantic==2.10.6
+pydantic-settings==2.7.1
+python-dotenv==1.1.0
+
+# CLI output
+rich==13.9.4
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
