@@ -66,7 +66,7 @@ def _seed_scenario(delay_minutes: int = 32, departure_window: int = 25, crew_ava
 
 
 def _mock_llm_response(verdict: str, recoverable: list[str], unrecoverable: list[str], reasoning: str):
-    """Build a mock ChatAnthropic response returning the given JSON."""
+    """Build a mock ChatGoogleGenerativeAI response returning the given JSON."""
     response_json = json.dumps({
         "verdict": verdict,
         "recoverable_bags": recoverable,
@@ -107,7 +107,7 @@ def test_fetch_ramp_returns_availability():
     assert result["ramp_zone"] == "B"
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_full_recoverable_scenario(mock_anthropic_cls):
     """All 3 bags recoverable: exception routing opened, ramp task assigned."""
     _seed_scenario(delay_minutes=10, departure_window=40)
@@ -148,7 +148,7 @@ def test_full_recoverable_scenario(mock_anthropic_cls):
     assert "route_bags" in node_names
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_full_unrecoverable_scenario(mock_anthropic_cls):
     """All 3 bags missed: marked MISSED, passengers notified."""
     _seed_scenario(delay_minutes=45, departure_window=5)
@@ -181,7 +181,7 @@ def test_full_unrecoverable_scenario(mock_anthropic_cls):
     assert all(n["type"] == "MISSED" for n in sent)
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_partial_scenario(mock_anthropic_cls):
     """2 bags recoverable, 1 missed — both route_bags and flag_missed execute."""
     _seed_scenario(delay_minutes=30, departure_window=30)
@@ -213,7 +213,7 @@ def test_partial_scenario(mock_anthropic_cls):
     assert sent[0]["bag_tag"] == "BA-003"
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_no_at_risk_bags_short_circuits(mock_anthropic_cls):
     """When no bags are at risk, LLM is NOT called and graph exits cleanly."""
     store.reset()

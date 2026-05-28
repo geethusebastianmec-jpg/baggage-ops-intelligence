@@ -123,7 +123,7 @@ def test_playbook_no_match_for_small_delay():
 
 # ── Supervisor integration tests ─────────────────────────────────────────────
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_supervisor_activates_coordinators_in_parallel(mock_anthropic):
     """Playbook fires, both baggage and ramp coordinators run, results collected."""
     _seed()
@@ -152,8 +152,8 @@ def test_supervisor_activates_coordinators_in_parallel(mock_anthropic):
     assert result["errors"] == {}
 
 
-@patch("src.tier1.supervisor.ChatAnthropic")
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier1.supervisor.ChatGoogleGenerativeAI")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_supervisor_react_for_unknown_event(mock_baggage_llm, mock_supervisor_llm):
     """COMPOUND event hits ReAct path — supervisor reasons about activation."""
     _seed()
@@ -188,9 +188,9 @@ def test_supervisor_react_for_unknown_event(mock_baggage_llm, mock_supervisor_ll
     assert "baggage_coordinator" in result["coordinators_activated"]
 
 
-@patch("src.tier1.supervisor.ChatAnthropic")
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
-@patch("src.tier2.dispatch_coordinator.ChatAnthropic")
+@patch("src.tier1.supervisor.ChatGoogleGenerativeAI")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
+@patch("src.tier2.dispatch_coordinator.ChatGoogleGenerativeAI")
 def test_supervisor_detects_hold_depart_conflict(mock_dispatch_llm, mock_bag_llm, mock_sup_llm):
     """When baggage says HOLD and dispatch says DEPART, supervisor arbitrates."""
     _seed()

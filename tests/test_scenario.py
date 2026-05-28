@@ -20,7 +20,7 @@ def _llm_response(content: str) -> MagicMock:
     return mock_llm
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_scenario_aa401_partial(mock_llm_cls):
     """AA401 (+32 min) → 5 recoverable, 2 missed out of 7 bags."""
     from demo.seed_data import load
@@ -61,7 +61,7 @@ def test_scenario_aa401_partial(mock_llm_cls):
     assert notified_tags == {"BA-006", "BA-007"}
 
 
-@patch("src.tier2.baggage_coordinator.ChatAnthropic")
+@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
 def test_scenario_aa402_recoverable(mock_llm_cls):
     """AA402 (+18 min) → all 3 bags recoverable."""
     from demo.seed_data import load
@@ -99,7 +99,7 @@ def test_scenario_aa403_no_action():
 
     # AA403 bags have is_at_risk=False in seed data
     # Coordinator should short-circuit with RECOVERABLE verdict and no LLM call
-    with patch("src.tier2.baggage_coordinator.ChatAnthropic") as mock_llm:
+    with patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI") as mock_llm:
         from src.tier1.supervisor import StrategicSupervisor
         sup = StrategicSupervisor()
         result = sup.process(DisruptionEvent(

@@ -14,7 +14,7 @@ def test_config_loads():
     assert settings.kafka_bootstrap_servers
     assert settings.postgres_dsn
     assert settings.redis_url
-    assert settings.llm_tier2 == "claude-sonnet-4-5"
+    assert settings.llm_tier2 == "gemini-2.0-flash"
 
 
 def test_settings_have_defaults():

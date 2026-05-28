@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 
@@ -120,10 +120,10 @@ def evaluate_feasibility(state: BaggageCoordinatorState) -> dict[str, Any]:
             "feasibility_reasoning": "No at-risk connections found — no action needed.",
         }
 
-    llm = ChatAnthropic(
+    llm = ChatGoogleGenerativeAI(
         model=settings.llm_tier2,
-        api_key=settings.anthropic_api_key,
-        max_tokens=512,
+        google_api_key=settings.google_api_key,
+        max_output_tokens=512,
         temperature=0,
     )
 

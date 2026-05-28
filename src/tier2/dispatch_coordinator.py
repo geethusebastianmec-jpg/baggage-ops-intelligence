@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 import json
 
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 
@@ -62,8 +62,8 @@ def decide_hold(state: DispatchCoordinatorState) -> dict[str, Any]:
         return _decision("HOLD", f"{recoverable} bag(s) recoverable with {window} min remaining — hold approved.", state)
 
     # Ambiguous: use LLM
-    llm = ChatAnthropic(model=settings.llm_tier2, api_key=settings.anthropic_api_key,
-                        max_tokens=256, temperature=0)
+    llm = ChatGoogleGenerativeAI(model=settings.llm_tier2, google_api_key=settings.google_api_key,
+                                 max_output_tokens=256, temperature=0)
     system = SystemMessage(content=(
         "You are a departure control agent. Decide: HOLD, DEPART, or ESCALATE.\n"
         "Respond ONLY with JSON: {\"decision\": \"HOLD\"|\"DEPART\"|\"ESCALATE\", \"reasoning\": \"<one sentence>\"}"

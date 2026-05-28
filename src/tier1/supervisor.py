@@ -21,7 +21,7 @@ import concurrent.futures
 import json
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.config import settings
@@ -116,11 +116,11 @@ class StrategicSupervisor:
     def _arbitrate(
         self, event: DisruptionEvent, results: dict[str, dict], conflicts: list[tuple[str, str]]
     ) -> dict[str, Any]:
-        """Use Claude Opus to resolve conflicts between domain coordinators."""
-        llm = ChatAnthropic(
+        """Use Gemini Pro to resolve conflicts between domain coordinators."""
+        llm = ChatGoogleGenerativeAI(
             model=settings.llm_tier1_novel,
-            api_key=settings.anthropic_api_key,
-            max_tokens=512,
+            google_api_key=settings.google_api_key,
+            max_output_tokens=512,
             temperature=0,
         )
         conflict_summary = []
@@ -153,11 +153,11 @@ class StrategicSupervisor:
     # ── ReAct path ────────────────────────────────────────────────────────────
 
     def _run_react(self, event: DisruptionEvent) -> dict[str, Any]:
-        """Novel or compound disruption — reason with Claude Opus then dispatch."""
-        llm = ChatAnthropic(
+        """Novel or compound disruption — reason with Gemini Pro then dispatch."""
+        llm = ChatGoogleGenerativeAI(
             model=settings.llm_tier1_novel,
-            api_key=settings.anthropic_api_key,
-            max_tokens=1024,
+            google_api_key=settings.google_api_key,
+            max_output_tokens=1024,
             temperature=0,
         )
         available = list(_COORDINATOR_BUILDERS.keys())

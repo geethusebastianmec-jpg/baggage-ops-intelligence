@@ -97,7 +97,7 @@ def _run_scenario_in_background():
     def _llm_factory(**kw):
         return next(llm_responses, _llm("RECOVERABLE", [], [], "No bags")())
 
-    with patch("src.tier2.baggage_coordinator.ChatAnthropic", side_effect=_llm_factory):
+    with patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI", side_effect=_llm_factory):
         from demo.seed_data import load
         from src.models import DisruptionEvent, DisruptionType, Severity
         from src.tier1.supervisor import StrategicSupervisor
