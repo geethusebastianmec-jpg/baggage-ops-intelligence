@@ -13,8 +13,15 @@ Usage (with live API server):
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
+
+# Ensure the project root is on sys.path so `src` is importable regardless of
+# where Streamlit or Python is launched from.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 import threading
 from datetime import datetime
 from typing import Any

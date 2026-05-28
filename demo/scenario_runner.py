@@ -9,7 +9,13 @@ Usage:
 """
 from __future__ import annotations
 
+import os
+import sys
 import time
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 from datetime import datetime, timezone
 
 from rich.console import Console
