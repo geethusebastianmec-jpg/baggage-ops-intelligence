@@ -1,0 +1,38 @@
+services:
+  # ── Streamlit dashboard (the shareable frontend URL) ───────────────────────
+  - type: web
+    name: baggage-dashboard
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: >
+      python -m streamlit run demo/dashboard.py
+      --server.port $PORT
+      --server.address 0.0.0.0
+      --server.headless true
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false          # you set this in the Render dashboard
+      - key: LLM_TIER2
+        value: gemini-2.0-flash
+      - key: LLM_TIER1_NOVEL
+        value: gemini-1.5-pro
+      - key: LLM_TIER1_PLAYBOOK
+        value: gemini-2.0-flash
+      - key: TOOL_LATENCY_MS
+        value: "100"
+
+  # ── FastAPI backend (WebSocket event stream + override endpoint) ───────────
+  - type: web
+    name: baggage-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: LLM_TIER2
+        value: gemini-2.0-flash
