@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements-deploy.txt .
+RUN pip install --no-cache-dir -r requirements-deploy.txt
+RUN pip install --no-cache-dir requests==2.32.3
+COPY . .
+EXPOSE 8501
+CMD ["python", "-m", "streamlit", "run", "demo/dashboard.py", \
+     "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]

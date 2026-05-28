@@ -7,6 +7,7 @@ from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
 from src.config import settings
+from src.events.kafka_config import producer_config, _base
 from src.events.topics import Topics
 from src.models import DelayEvent, GateChangeEvent, CancellationEvent, ActionRecord, DisruptionEvent
 
@@ -14,7 +15,7 @@ from src.models import DelayEvent, GateChangeEvent, CancellationEvent, ActionRec
 class EventProducer:
     def __init__(self, bootstrap_servers: str | None = None):
         self._servers = bootstrap_servers or settings.kafka_bootstrap_servers
-        self._producer = Producer({"bootstrap.servers": self._servers})
+        self._producer = Producer(producer_config())
 
     def _publish(self, topic: str, payload: dict[str, Any], key: str | None = None) -> None:
         self._producer.produce(
@@ -63,8 +64,7 @@ class EventProducer:
 
 def ensure_topics_exist(bootstrap_servers: str | None = None) -> None:
     """Create all required topics if they don't exist (idempotent)."""
-    servers = bootstrap_servers or settings.kafka_bootstrap_servers
-    admin = AdminClient({"bootstrap.servers": servers})
+    admin = AdminClient(_base())
     all_topics = [
         Topics.FLIGHT_DELAYS, Topics.GATE_CHANGES, Topics.CANCELLATIONS,
         Topics.BAGGAGE_EXCEPTIONS, Topics.RAMP_CREW_STATUS, Topics.EQUIPMENT_ALERTS,

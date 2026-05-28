@@ -1,0 +1,5 @@
+[build]
+builder = "dockerfile"
+
+# Each service below is deployed separately in the Railway dashboard.
+# See DEPLOY.md for the step-by-step guide.

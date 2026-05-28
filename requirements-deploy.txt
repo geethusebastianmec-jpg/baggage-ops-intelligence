@@ -1,0 +1,29 @@
+# Deployment requirements — used by Render / cloud hosts.
+# Excludes Kafka, Postgres, Redis clients (not needed for the demo path).
+
+# Agent framework
+langgraph==0.2.70
+langchain-google-genai==2.1.4
+langchain-core==0.3.65
+
+# API layer
+fastapi==0.115.12
+uvicorn[standard]==0.30.6
+websockets==13.1
+
+# Demo UI
+streamlit==1.40.2
+
+# Data models
+pydantic==2.10.6
+pydantic-settings==2.7.1
+python-dotenv==1.1.0
+
+# CLI output (used by scenario_runner)
+rich==13.9.4
+
+# HTTP client (dashboard → API)
+requests==2.32.3
+
+# Kafka (needed by API + worker)
+confluent-kafka==2.6.1

@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements-deploy.txt .
+RUN pip install --no-cache-dir -r requirements-deploy.txt
+RUN pip install --no-cache-dir confluent-kafka==2.6.1
+COPY . .
+CMD ["python", "src/worker.py"]

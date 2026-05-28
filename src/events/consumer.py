@@ -13,6 +13,7 @@ from typing import Any
 from confluent_kafka import Consumer, KafkaError
 
 from src.config import settings
+from src.events.kafka_config import consumer_config
 from src.events.topics import Topics
 from src.events.producer import EventProducer
 from src.models import DisruptionEvent, DisruptionType, Severity
@@ -36,14 +37,8 @@ class SupervisorConsumer:
         bootstrap_servers: str | None = None,
         auto_offset_reset: str = "latest",
     ):
-        self._servers = bootstrap_servers or settings.kafka_bootstrap_servers
-        self._consumer = Consumer({
-            "bootstrap.servers": self._servers,
-            "group.id": group_id,
-            "auto.offset.reset": auto_offset_reset,
-            "enable.auto.commit": True,
-        })
-        self._producer = EventProducer(self._servers)
+        self._consumer = Consumer(consumer_config(group_id, auto_offset_reset))
+        self._producer = EventProducer()
         self._running = False
         self._stop_event = threading.Event()
 

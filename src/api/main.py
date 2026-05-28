@@ -1,12 +1,19 @@
-"""FastAPI service — WebSocket event stream + HITL override endpoint.
+"""FastAPI service.
 
-The dashboard connects to /ws/events to receive live agent activity.
-The scenario runner pushes events via push_event().
+Responsibilities:
+  1. POST /scenario/run   — seeds data + publishes 3 delay events to Kafka
+  2. GET  /scenario/state — current bag/action snapshot (polled by dashboard)
+  3. WS   /ws/events      — streams audit actions as they arrive from Kafka
+  4. POST /override       — HITL decision injection
+
+On startup a background thread polls ops.audit.actions and pushes each record
+into an asyncio Queue that the WebSocket handler drains.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,96 +23,154 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="Baggage Ops Intelligence API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# In-memory event queue — populated by push_event(), drained by WebSocket handler
-_event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
-
-# Snapshot of latest system state for the dashboard to read on connect
-_state_snapshot: dict[str, Any] = {
-    "flights": {},
-    "bags": {},
-    "actions": [],
-    "notifications": [],
-}
+# ── Shared in-memory state ────────────────────────────────────────────────────
+_event_queue: asyncio.Queue = asyncio.Queue(maxsize=2000)
+_scenario_running: bool = False
+_scenario_events: list[dict[str, Any]] = []
 
 
-def push_event(event_type: str, payload: dict[str, Any]) -> None:
-    """Called from scenario_runner or consumer to publish an event to the dashboard."""
-    envelope = {
-        "type": event_type,
-        "payload": payload,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+def _ts() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _push(event_type: str, payload: dict[str, Any]) -> None:
+    envelope = {"type": event_type, "payload": payload, "timestamp": _ts()}
     try:
         _event_queue.put_nowait(envelope)
     except asyncio.QueueFull:
-        pass  # Non-blocking — dashboard just misses one event
+        pass
+    _scenario_events.append(envelope)
 
 
-def push_action(action: dict[str, Any]) -> None:
-    _state_snapshot["actions"].append(action)
-    push_event("ACTION", action)
+# ── Background Kafka audit consumer ──────────────────────────────────────────
+
+def _start_audit_consumer() -> None:
+    """Runs in a daemon thread; polls ops.audit.actions → pushes to WebSocket queue."""
+    try:
+        from confluent_kafka import Consumer, KafkaError
+        from src.events.kafka_config import consumer_config
+        from src.events.topics import Topics
+
+        consumer = Consumer(consumer_config("api-audit-reader", auto_offset_reset="latest"))
+        consumer.subscribe([Topics.AUDIT_ACTIONS])
+
+        while True:
+            msg = consumer.poll(timeout=0.2)
+            if msg is None:
+                continue
+            if msg.error():
+                if msg.error().code() != KafkaError._PARTITION_EOF:
+                    print(f"[AUDIT-CONSUMER] {msg.error()}")
+                continue
+            try:
+                payload = json.loads(msg.value().decode("utf-8"))
+                _push("AUDIT_ACTION", payload)
+            except Exception as exc:
+                print(f"[AUDIT-CONSUMER] parse error: {exc}")
+    except Exception as exc:
+        print(f"[AUDIT-CONSUMER] fatal: {exc}")
 
 
-def push_bag_update(bag_tag: str, status: str, coordinator: str = "") -> None:
-    _state_snapshot["bags"][bag_tag] = {"status": status, "coordinator": coordinator}
-    push_event("BAG_UPDATE", {"bag_tag": bag_tag, "status": status, "coordinator": coordinator})
+@app.on_event("startup")
+async def _on_startup() -> None:
+    t = threading.Thread(target=_start_audit_consumer, daemon=True)
+    t.start()
 
 
-def push_notification(passenger_id: str, bag_tag: str, notif_type: str, message: str) -> None:
-    record = {"passenger_id": passenger_id, "bag_tag": bag_tag, "type": notif_type, "message": message}
-    _state_snapshot["notifications"].append(record)
-    push_event("NOTIFICATION", record)
-
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "scenario_running": _scenario_running}
 
 
-@app.get("/state")
+@app.post("/scenario/run")
+def run_scenario() -> dict:
+    """Seed data and publish the 3 hub crisis events to Kafka."""
+    global _scenario_running, _scenario_events
+    _scenario_running = True
+    _scenario_events = []
+
+    from demo.seed_data import load
+    from src.events.producer import EventProducer, ensure_topics_exist
+    from src.models import DelayEvent, DelayReason
+    from src.tools.passenger_notify import PassengerNotifyTool
+
+    PassengerNotifyTool.clear()
+    load()
+
+    try:
+        ensure_topics_exist()
+    except Exception:
+        pass  # topics may already exist
+
+    producer = EventProducer()
+    producer.publish_delay(DelayEvent(flight_id="AA401", delay_minutes=32, reason=DelayReason.WEATHER))
+    producer.publish_delay(DelayEvent(flight_id="AA402", delay_minutes=18, reason=DelayReason.CONNECTING))
+    producer.publish_delay(DelayEvent(flight_id="AA403", delay_minutes=11, reason=DelayReason.CONNECTING))
+    producer.flush(timeout=5.0)
+
+    _push("SCENARIO_STARTED", {"events_published": 3, "timestamp": _ts()})
+    return {"status": "events_published", "count": 3}
+
+
+@app.get("/scenario/state")
 def get_state() -> dict:
-    """Return the current state snapshot for dashboard initial load."""
+    """Snapshot of current bags + recent audit events — polled by the dashboard."""
     from src.tools import store
     from src.tools.passenger_notify import PassengerNotifyTool
+    from src.models import BagStatus
+
+    bags = {}
+    for tag, bag in store.BAGS.items():
+        if bag.destination_flight:
+            bags[tag] = {
+                "status": bag.status.value,
+                "passenger": bag.passenger_name,
+                "origin_flight": bag.origin_flight,
+                "destination_flight": bag.destination_flight,
+            }
+
+    saved = [t for t, b in store.BAGS.items()
+             if b.status == BagStatus.EXCEPTION and b.destination_flight]
+    missed = [t for t, b in store.BAGS.items() if b.status == BagStatus.MISSED]
+
     return {
-        "flights": {fid: f.model_dump() for fid, f in store.FLIGHTS.items()},
-        "bags": {tag: b.model_dump() for tag, b in store.BAGS.items()},
-        "actions": store.ACTION_LOG[-50:],
+        "scenario_running": _scenario_running,
+        "bags": bags,
+        "saved_count": len(saved),
+        "missed_count": len(missed),
+        "saved": saved,
+        "missed": missed,
         "notifications": PassengerNotifyTool.get_sent(),
+        "recent_events": _scenario_events[-30:],
+        "action_count": len(store.ACTION_LOG),
     }
 
 
 @app.post("/override")
-async def override(body: dict[str, Any]) -> dict:
-    """Human-in-the-loop: inject a decision into the system."""
-    push_event("OVERRIDE", {
+def override(body: dict[str, Any]) -> dict:
+    _push("OVERRIDE", {
         "decision": body.get("decision"),
         "target": body.get("target"),
         "operator": body.get("operator", "HUMAN"),
         "note": body.get("note", ""),
     })
-    return {"status": "override_queued", "decision": body.get("decision")}
+    return {"status": "override_queued"}
 
 
 @app.websocket("/ws/events")
-async def websocket_events(websocket: WebSocket):
+async def websocket_events(websocket: WebSocket) -> None:
     await websocket.accept()
-    # Send current state on connect
-    await websocket.send_text(json.dumps({
-        "type": "SNAPSHOT",
-        "payload": await asyncio.get_event_loop().run_in_executor(None, lambda: {
-            "flights": list({"AA401": "DELAYED+32", "AA402": "DELAYED+18",
-                             "AA403": "DELAYED+11", "AA501": "ON_TIME", "AA502": "ON_TIME"}.items()),
-        }),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }))
+    # Send buffered events so late connectors catch up
+    for ev in _scenario_events[-50:]:
+        await websocket.send_text(json.dumps(ev, default=str))
     try:
         while True:
             try:
-                event = await asyncio.wait_for(_event_queue.get(), timeout=30.0)
+                event = await asyncio.wait_for(_event_queue.get(), timeout=25.0)
                 await websocket.send_text(json.dumps(event, default=str))
             except asyncio.TimeoutError:
-                # Send heartbeat to keep connection alive
                 await websocket.send_text(json.dumps({"type": "PING"}))
     except WebSocketDisconnect:
         pass
