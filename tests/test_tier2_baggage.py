@@ -138,8 +138,10 @@ def test_full_recoverable_scenario(mock_anthropic_cls):
     lp = store.LOAD_PLANS["AA501"]
     assert "BA-001" in lp.pending_bags
 
-    # No passenger notifications (bags are being saved)
-    assert len(PassengerNotifyTool.get_sent()) == 0
+    # Passengers notified AT_RISK (bag is being handled, but they should know)
+    sent = PassengerNotifyTool.get_sent()
+    assert len(sent) == 3
+    assert all(n["type"] == "AT_RISK" for n in sent)
 
     # Actions log has entries from all nodes
     actions = result["actions_taken"]
@@ -209,8 +211,12 @@ def test_partial_scenario(mock_anthropic_cls):
     assert store.BAGS["BA-003"].status == BagStatus.MISSED
 
     sent = PassengerNotifyTool.get_sent()
-    assert len(sent) == 1
-    assert sent[0]["bag_tag"] == "BA-003"
+    # BA-001, BA-002 get AT_RISK; BA-003 gets MISSED
+    assert len(sent) == 3
+    missed = [n for n in sent if n["type"] == "MISSED"]
+    at_risk = [n for n in sent if n["type"] == "AT_RISK"]
+    assert len(missed) == 1 and missed[0]["bag_tag"] == "BA-003"
+    assert len(at_risk) == 2
 
 
 @patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")

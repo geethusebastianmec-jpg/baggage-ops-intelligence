@@ -216,17 +216,28 @@ def route_bags(state: BaggageCoordinatorState) -> dict[str, Any]:
     # Assign ramp task
     ramp_ticket = _ramp.assign_exception_task(recoverable, inbound, outbound, zone)
 
+    # Notify passengers their bag is at risk but being actively handled
+    from src.tools import store
+    notified = []
+    for tag in recoverable:
+        bag = store.BAGS.get(tag)
+        if bag:
+            _notify.notify_bag_at_risk(bag.passenger_id, tag, outbound)
+            notified.append(bag.passenger_id)
+
     actions = [{
         "node": "route_bags",
-        "tool": "bhs+ramp+load_plan",
+        "tool": "bhs+ramp+load_plan+passenger_notify",
         "result": (
             f"Exception routing opened for {len(recoverable)} bags "
             f"(ticket {ticket.ticket_id}). "
-            f"Ramp task: {'assigned' if ramp_ticket else 'FAILED — no crew'}."
+            f"Ramp task: {'assigned' if ramp_ticket else 'FAILED — no crew'}. "
+            f"{len(notified)} passengers notified (AT_RISK)."
         ),
         "bag_tags": recoverable,
         "bhs_ticket": ticket.ticket_id,
         "ramp_ticket": ramp_ticket.ticket_id if ramp_ticket else None,
+        "passengers_notified": notified,
     }]
     return {"actions_taken": actions}
 

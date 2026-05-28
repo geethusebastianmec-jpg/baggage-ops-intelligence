@@ -88,7 +88,10 @@ def test_scenario_aa402_recoverable(mock_llm_cls):
     assert baggage_result.get("feasibility_verdict") == "RECOVERABLE"
     for tag in ["BA-008", "BA-009", "BA-010"]:
         assert store.BAGS[tag].status == BagStatus.EXCEPTION
-    assert len(PassengerNotifyTool.get_sent()) == 0
+    # AT_RISK notifications sent — passengers told bag is being actively handled
+    sent = PassengerNotifyTool.get_sent()
+    assert len(sent) == 3
+    assert all(n["type"] == "AT_RISK" for n in sent)
 
 
 def test_scenario_aa403_no_action():
