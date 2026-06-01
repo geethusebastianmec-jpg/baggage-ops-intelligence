@@ -46,15 +46,21 @@ ActionRecords  →  Kafka  →  audit trail + live dashboard
 
 ### The design principle: use the simplest correct tool
 
-Every question in the system is answered at the cheapest tier that gets it right:
+Every question is answered at the cheapest tier that gets it right:
 
 | Tier | Tool | Question answered |
 |---|---|---|
 | 0 | State store | Where is bag X right now? |
-| 1 | Deterministic rules | Is this bag at risk? (`slack = window − move_time`) · Who gets notified? · Hold or depart? |
-| 2 | **CP-SAT solver** | Multiple bags competing for scarce crew — which subset do we save? |
+| 1 | Deterministic rules | Is this bag at risk? (`slack = window − move_time`) · Hold or depart cost comparison |
+| 2a | **OR-Tools CP-SAT** | Which bags to rush under ramp crew contention? (resource assignment) |
+| 2b | **OR-Tools MIP (CBC)** | Which flight for each missed bag? (multi-commodity flow, capacity-constrained) |
 | 3 | Thin agent loop | Which of the above does this situation need, and in what order? |
 | 4 | LLM (last resort) | Novel compound disruptions no playbook covers |
+
+**Why two solvers at Tier 2?** Different problem structures require different solvers.
+CP-SAT excels at resource assignment with logical constraints (crew capacity, priority rules).
+MIP excels at network flow problems with capacity allocation and optimality guarantees.
+See [`research/mip-vs-cpsat.md`](research/mip-vs-cpsat.md) for the full analysis.
 
 The LLM is not in the feasibility calculation. Feasibility is arithmetic.
 The LLM decides which coordinators to activate for situations it has never seen before.
@@ -140,7 +146,8 @@ Coordinator      Coordinator  Failure         Coordinator  Cascade
    │
    ├─ Tier 1: slack triage per bag (window − move_time)
    ├─ Tier 1: contention check
-   ├─ Tier 2: CP-SAT if contended (OR-Tools)
+   ├─ Tier 2a: CP-SAT if crew contended — which bags to rush (OR-Tools)
+   ├─ Tier 2b: MIP if bag missed — which rerouting flight (OR-Tools CBC)
    └─ close_loop: confirming scan → RECOVERED notification
    │
    ▼
@@ -155,7 +162,8 @@ BHS · AODB · Load Plan · Ramp · Passenger Notify
 | Layer | Technology | Role |
 |---|---|---|
 | Agent framework | **LangGraph** | DAG execution, hierarchical supervisor, checkpointing |
-| Feasibility solver | **OR-Tools CP-SAT** | Optimal bag recovery under crew contention — Tier 2 |
+| Crew contention solver | **OR-Tools CP-SAT** | Tier 2a — which bags to rush under ramp crew capacity limit |
+| Rerouting solver | **OR-Tools MIP (CBC)** | Tier 2b — which flight for each missed bag, capacity-constrained |
 | LLM | **Gemini 1.5 Pro** | Novel compound disruptions only — Tier 4, Strategic Supervisor |
 | Event bus | **Redpanda** (Kafka-compatible) | Durable audit log, fan-out, event replay |
 | Backend API | **FastAPI** + WebSocket | Scenario triggers, live event streaming |
@@ -258,9 +266,10 @@ baggage/
 │   ├── worker.py                   Kafka consumer service entry point
 │   ├── models/                     Pydantic types — Flight, Bag, DisruptionEvent, etc.
 │   ├── tools/                      Tier 0: BHS, load plan, ramp, AODB mock wrappers
-│   ├── solver/                     Tier 1 + 2: triage math + CP-SAT optimizer
-│   │   ├── triage.py               Deterministic slack-based bag triage
-│   │   └── optimizer.py            OR-Tools CP-SAT for contended recovery
+│   ├── solver/                     Tier 1 + 2: triage, CP-SAT, and MIP
+│   │   ├── triage.py               Tier 1: deterministic slack-based bag triage
+│   │   ├── optimizer.py            Tier 2a: OR-Tools CP-SAT — which bags to rush
+│   │   └── rerouter.py             Tier 2b: OR-Tools MIP (CBC) — which flight for missed bags
 │   ├── tier2/                      Domain coordinators (LangGraph DAGs)
 │   │   ├── baggage_coordinator.py         Delay: triage → CP-SAT → dispatch → close_loop
 │   │   ├── cancellation_coordinator.py    Cancellation: rebook + offload + notify
@@ -332,7 +341,7 @@ and runs CP-SAT optimization across all at-risk bags simultaneously.
 python -m pytest tests/ -v
 ```
 
-83 tests, all passing. Deterministic logic (triage, tools, coordinators) needs no
+94 tests, all passing. Deterministic logic (triage, CP-SAT, MIP, coordinators) needs no
 mocking. The Strategic Supervisor's LLM path is mocked in the 3 tests that exercise
 novel-event and conflict-arbitration scenarios.
 
@@ -367,7 +376,8 @@ Check `KAFKA_BOOTSTRAP_SERVERS` in `.env` matches the running Redpanda instance.
 | [Architecture decision](research/agentic-system-design.md) | Why Event-Driven Hierarchical Supervisor with DAG execution, why other patterns fail |
 | [Tech stack](research/tech-stack.md) | Why LangGraph over CrewAI/AutoGen, why Kafka over RabbitMQ/Redis |
 | [Architecture revision](research/architecture-revision.md) | Why V1 used an LLM incorrectly, the correct tier-based design, CP-SAT model specification |
+| [MIP vs CP-SAT](research/mip-vs-cpsat.md) | When each solver is correct for baggage IROPS; hybrid Tier 2a/2b architecture |
 
 ---
 
-*Built with LangGraph · OR-Tools CP-SAT · Gemini · Redpanda · FastAPI · Streamlit*
+*Built with LangGraph · OR-Tools CP-SAT + MIP · Gemini · Redpanda · FastAPI · React*

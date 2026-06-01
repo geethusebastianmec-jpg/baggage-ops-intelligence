@@ -35,11 +35,12 @@ export const WORKFLOWS = [
 ]
 
 export const TIERS = [
-  { id:'T0', tool:'DB read',  color:'#64748b', desc:'Where is bag X right now?' },
-  { id:'T1', tool:'Rules',    color:'#64748b', desc:'Is this bag at risk?  slack = window − move_time' },
-  { id:'T2', tool:'CP-SAT',   color:'#0066cc', desc:'Which subset to save under crew contention?' },
-  { id:'T3', tool:'Agent',    color:'#7c3aed', desc:'Which workflows to activate and in what order?' },
-  { id:'T4', tool:'LLM',      color:'#d97706', desc:'Novel compound events no playbook covers — routing only' },
+  { id:'T0',  tool:'DB read',  color:'#64748b', desc:'Where is bag X right now?' },
+  { id:'T1',  tool:'Rules',    color:'#64748b', desc:'Is this bag at risk?  slack = window − move_time  ·  Hold vs depart cost' },
+  { id:'T2a', tool:'CP-SAT',   color:'#0066cc', desc:'Which bags to rush under ramp crew contention? (resource assignment)' },
+  { id:'T2b', tool:'MIP',      color:'#0284c7', desc:'Which flight for each missed bag? (multi-commodity flow, capacity-constrained)' },
+  { id:'T3',  tool:'Agent',    color:'#7c3aed', desc:'Which workflows to activate and in what order?' },
+  { id:'T4',  tool:'LLM',      color:'#d97706', desc:'Novel compound events no playbook covers — routing only' },
 ]
 
 export const NODE_LABELS: Record<string, string> = {

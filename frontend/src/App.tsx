@@ -124,7 +124,7 @@ export default function App() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
             {[
               { label: 'The Problem', text: 'A human AOCC coordinator makes four phone calls — baggage, ramp, dispatch, comms. Each 1–3 minutes. Sequential. By call four, bags have already missed their window.', accent: C.red },
-              { label: 'The Solution', text: 'The system activates all four coordinators simultaneously. Deterministic triage (pure math). CP-SAT for crew contention. LLM only for novel compound events no playbook covers.', accent: C.blue },
+              { label: 'The Solution', text: 'The system activates all four coordinators simultaneously. Deterministic triage (pure math). CP-SAT for crew contention. MIP for optimal rerouting of missed bags. LLM only for novel compound events.', accent: C.blue },
               { label: 'The Result', text: '+40% bags recovered vs. manual baseline. 2.5 second decision time. 74% recovery rate vs. 34%. Every passenger notified automatically at each stage.', accent: C.green },
             ].map(({ label, text, accent }) => (
               <Card key={label} style={{ borderTop: `3px solid ${accent}` }}>
@@ -142,7 +142,7 @@ export default function App() {
             { num: '2.5s', sub: 'vs ~3 min manual', label: 'Decision time', color: C.blue },
             { num: '12', sub: 'AA401/402/403', label: 'Bags at risk', color: C.amber },
             { num: '8', sub: 'all implemented', label: 'Disruption types', color: C.blue },
-            { num: '83', sub: 'all passing', label: 'Tests', color: C.green },
+            { num: '94', sub: 'all passing', label: 'Tests', color: C.green },
             { num: '$5B', sub: 'industry / year', label: 'Cost of problem', color: C.red },
           ].map(({ num, sub, label, color }) => (
             <Card key={label} style={{ textAlign: 'center', padding: '14px 10px' }}>
@@ -251,7 +251,7 @@ export default function App() {
               }} />
               <p style={{ fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>Agents coordinating&hellip;</p>
               <p style={{ fontSize: '0.82rem', color: C.slate }}>
-                Events in Kafka &rarr; Worker &rarr; Triage &rarr; CP-SAT &rarr; Actions dispatched
+                Events in Kafka &rarr; Worker &rarr; Triage &rarr; CP-SAT / MIP &rarr; Actions dispatched
               </p>
               <p style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: C.muted, marginTop: 8 }}>
                 Actions: {actionCount} | Confirmed: {saved.length} | Missed: {missed.length}
@@ -516,7 +516,7 @@ export default function App() {
 
         {/* FOOTER */}
         <footer style={{ textAlign: 'center', color: C.muted, fontSize: '0.75rem', paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-          Built by <strong>dCortex</strong> &middot; LangGraph &middot; OR-Tools CP-SAT &middot; Gemini &middot; Redpanda &middot; FastAPI
+          Built by <strong>dCortex</strong> &middot; LangGraph &middot; OR-Tools CP-SAT + MIP &middot; Gemini &middot; Redpanda &middot; FastAPI
         </footer>
 
       </main>
