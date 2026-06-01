@@ -130,48 +130,57 @@ Tier 3 coordinator: sequence and dispatch both plans
 
 ## Implementation Roadmap
 
-### Phase 1 — already done (CP-SAT)
+### Phase 1 — done (CP-SAT)
 
 `src/solver/optimizer.py` — resource assignment for bags that can still make
 the connection. Crew contention → binary CP-SAT → which subset to rush.
 
-**Status:** ✅ implemented and tested
+**Status:** ✅ implemented and tested (83 tests)
 
-### Phase 2 — the missing MIP layer
+### Phase 2 — done (MIP)
 
-New file: `src/solver/rerouter.py`
+`src/solver/rerouter.py` — multi-commodity flow MIP for missed-bag rerouting.
 
 ```python
-# Proposed interface
+# Implemented interface
 def reroute_missed_bags(
-    missed_bags: list[BagForRerouting],     # bags that cannot make original connection
-    available_flights: list[FlightLeg],     # candidate legs in next 12 hours
-    capacity: dict[str, int],               # remaining capacity per flight_id
-    priority_weights: dict[str, float],     # bag_tag → priority (VIP=2.0, normal=1.0)
+    bags: list[BagForRerouting],
+    flights: list[FlightLeg],
     time_limit_seconds: float = 5.0,
-) -> dict[str, str]:                        # bag_tag → new_flight_id
+) -> RerouteResult                      # assignments: bag_tag → flight_id
 ```
 
-**Solver choice:** HiGHS via `highspy` (open source, no licence cost, solves
-instances with 10,000+ variables in seconds).
+**Solver:** OR-Tools CBC (already installed, no extra package needed).
+**Formulation:** Binary assignment MIP with capacity, timing, and routing constraints.
+**Fallback:** Greedy (priority-ordered, earliest flight) when OR-Tools unavailable.
 
-**Formulation:** Multi-commodity flow on a time-expanded graph.
+**Status:** ✅ implemented and tested (11 new tests in test_mip_rerouter.py)
 
-### Phase 3 — hybrid coordinator
+### Phase 3 — done (coordinator integration)
 
-Update `src/tier2/cancellation_coordinator.py` and `src/tier2/loading_failure_coordinator.py`
-to call the MIP rerouter instead of the naive sequential lookup in `ScheduleTool`.
+`src/tier2/cancellation_coordinator.py` — `rebook_bags` node now calls MIP rerouter.
+Assigns all cancelled-flight bags simultaneously across all rerouting flights.
+Capacity-constrained: if 5 bags compete for a flight with capacity 3, exactly
+3 are assigned (the highest-priority ones).
+
+`src/tier2/loading_failure_coordinator.py` — `rebook_bag` node uses MIP with
+priority=1.2 (loading failures are urgent) and earliest_ready_minutes=20.
+
+`src/tools/store.py` — `REROUTING_FLIGHTS: list[FlightLeg]` added.
+
+`demo/seed_data.py` — 5 rerouting flights seeded (LHR and CDG routes,
+120 min to 1440 min departure windows, 12–50 bag capacity).
 
 ---
 
-## Summary: Our Solver Placement Is Correct, Our Coverage Is Partial
+## Summary: Solver Placement — Current State
 
-| Question | Our solver | Correct? |
+| Question | Solver | Status |
 |---|---|---|
 | Which bags to rush under crew limit? | CP-SAT | ✅ Correct — resource assignment |
 | Hold or depart? | Arithmetic (`bags × $150 vs hold × $500`) | ✅ Correct — simple rule |
-| Which missed bags to put on which flight? | Stub (naive sequential) | ❌ Should be MIP |
-| Bag network rerouting at scale? | Not implemented | ❌ Missing — needs MIP |
+| Which missed bags to put on which flight? | MIP (OR-Tools CBC) | ✅ Implemented |
+| Bag network rerouting under capacity | MIP time-expanded network | ✅ Implemented |
 
 The CP-SAT solver we have is in the right place for what it does. The gap is that
 we have no network-level rerouting optimiser. When a bag is marked MISSED, it gets
