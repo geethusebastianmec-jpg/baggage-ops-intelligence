@@ -125,7 +125,14 @@ def emergency_load(state: LoadingFailureCoordinatorState) -> dict[str, Any]:
 
 
 def rebook_bag(state: LoadingFailureCoordinatorState) -> dict[str, Any]:
-    """Tier 1 — book the bag on the next available flight to the destination."""
+    """Tier 2b — MIP optimal rerouting for a single bag that was never loaded.
+
+    Runs the same MIP rerouter as the cancellation coordinator but for
+    one bag. Priority is elevated slightly (1.2) because a loading failure
+    is operationally urgent — the passenger was expecting the bag on this flight.
+    """
+    from src.solver.rerouter import reroute_missed_bags, BagForRerouting
+
     tag = state["bag_tag"]
     flight_id = state["flight_id"]
     bag = store.BAGS.get(tag)
@@ -136,17 +143,39 @@ def rebook_bag(state: LoadingFailureCoordinatorState) -> dict[str, Any]:
             "actions_taken": [{"node": "rebook_bag", "result": f"Bag {tag} not found"}],
         }
 
-    # In production: query schedule for next flight to destination.
-    # In demo: simulate finding a next-day flight.
-    next_flight = f"{flight_id[:-2]}NEXT"
     _bhs.mark_bag_missed(tag)
 
+    if store.REROUTING_FLIGHTS:
+        result = reroute_missed_bags(
+            [BagForRerouting(
+                bag_tag=tag,
+                passenger_id=bag.passenger_id,
+                destination=bag.final_destination or "",
+                priority=1.2,                # slightly elevated — loading failure is urgent
+                earliest_ready_minutes=20,   # faster processing (bag is still in BHS)
+            )],
+            list(store.REROUTING_FLIGHTS),
+            time_limit_seconds=2.0,
+        )
+        next_flight = result.assignments.get(tag)
+        if next_flight:
+            _schedule.rebook_bag(tag, flight_id, next_flight)
+            return {
+                "rebooked": True, "next_flight": next_flight,
+                "actions_taken": [{
+                    "node": "rebook_bag", "tool": "mip_rerouter+bhs",
+                    "result": f"{tag} rerouted via MIP → {next_flight}. {result.reasoning}",
+                    "next_flight": next_flight,
+                }],
+            }
+
+    # Fallback if no rerouting flights available
+    next_flight = f"{flight_id[:-2]}NEXT"
     return {
-        "rebooked": True,
-        "next_flight": next_flight,
+        "rebooked": True, "next_flight": next_flight,
         "actions_taken": [{
-            "node": "rebook_bag", "tool": "bhs+schedule",
-            "result": f"{tag} marked missed on {flight_id}. Booked on {next_flight}.",
+            "node": "rebook_bag", "tool": "bhs",
+            "result": f"{tag} marked missed on {flight_id}. Fallback booking: {next_flight}.",
             "next_flight": next_flight,
         }],
     }

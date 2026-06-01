@@ -5,12 +5,16 @@ or already loaded on the cancelled flight.
 
   START
     └──[find_all_bags]          BHS: all bags on the cancelled flight
-           ├──[rebook_bags]     Schedule: find next flight + rebook each bag (parallel)
+           ├──[rebook_bags]     MIP: optimal rerouting across available flights (parallel)
            └──[offload_loaded]  Ramp: initiate off-load for bags already in hold (parallel)
                    └──[notify_passengers]  MISSED + rebooking ETA
                           └──END
 
-All Tier 1 — deterministic rules + schedule queries. No LLM.
+rebook_bags uses the Tier 2b MIP rerouter (src/solver/rerouter.py):
+  - Groups bags by destination
+  - Runs time-expanded network MIP across all available rerouting flights
+  - Assigns bags optimally under capacity constraints (priority bags first)
+  - Falls back to greedy if MIP solver unavailable
 """
 from __future__ import annotations
 from typing import Any, Annotated
@@ -84,44 +88,74 @@ def find_all_bags(state: CancellationCoordinatorState) -> dict[str, Any]:
 
 
 def rebook_bags(state: CancellationCoordinatorState) -> dict[str, Any]:
-    """Tier 1 — find next available flight + rebook every bag."""
+    """Tier 2b — MIP optimal rerouting for cancelled-flight bags.
+
+    Uses the time-expanded network MIP (src/solver/rerouter.py) to assign
+    each bag to the best available rerouting flight, respecting capacity
+    and prioritising by passenger priority weight.
+
+    Falls back to the naive sequential lookup if no rerouting flights
+    are seeded in the store.
+    """
+    from src.solver.rerouter import reroute_missed_bags, BagForRerouting
+
     flight_id = state["flight_id"]
     all_tags = state.get("all_bag_tags", [])
-    rebooked: dict[str, str] = {}
-    failed: list[str] = []
 
-    # Group bags by destination so we only query the schedule once per destination
-    dest_to_tags: dict[str, list[str]] = {}
+    # Build BagForRerouting objects
+    bags_to_reroute: list[BagForRerouting] = []
     for tag in all_tags:
         bag = store.BAGS.get(tag)
         if bag:
-            dest = bag.final_destination or ""
-            dest_to_tags.setdefault(dest, []).append(tag)
+            bags_to_reroute.append(BagForRerouting(
+                bag_tag=tag,
+                passenger_id=bag.passenger_id,
+                destination=bag.final_destination or "",
+                priority=1.0,          # can be elevated for VIP in production
+                earliest_ready_minutes=30,  # processing time before bag is ready
+            ))
 
-    flight = store.FLIGHTS.get(flight_id)
-    origin = flight.origin if flight else "JFK"
+    rebooked: dict[str, str] = {}
+    failed: list[str] = []
 
-    for destination, tags in dest_to_tags.items():
-        next_flight = _schedule.find_next_flight(origin, destination)
-        if next_flight:
-            nf_id = next_flight["flight_id"]
-            for tag in tags:
-                if _schedule.rebook_bag(tag, flight_id, nf_id):
-                    rebooked[tag] = nf_id
-                    _bhs.mark_bag_missed(tag)   # mark original flight as missed
-                else:
-                    failed.append(tag)
-        else:
-            failed.extend(tags)
+    if bags_to_reroute and store.REROUTING_FLIGHTS:
+        # MIP path — optimal rerouting across available flights
+        result = reroute_missed_bags(
+            bags_to_reroute,
+            list(store.REROUTING_FLIGHTS),  # pass a copy; MIP updates capacity
+            time_limit_seconds=5.0,
+        )
+        for tag, flight in result.assignments.items():
+            if flight:
+                _schedule.rebook_bag(tag, flight_id, flight)
+                _bhs.mark_bag_missed(tag)
+                rebooked[tag] = flight
+            else:
+                failed.append(tag)
+        reasoning = result.reasoning
+    else:
+        # Fallback — naive sequential lookup (original stub behaviour)
+        flight = store.FLIGHTS.get(flight_id)
+        origin = flight.origin if flight else "JFK"
+        for bag_obj in bags_to_reroute:
+            next_flight = _schedule.find_next_flight(origin, bag_obj.destination)
+            if next_flight:
+                nf_id = next_flight["flight_id"]
+                _schedule.rebook_bag(bag_obj.bag_tag, flight_id, nf_id)
+                _bhs.mark_bag_missed(bag_obj.bag_tag)
+                rebooked[bag_obj.bag_tag] = nf_id
+            else:
+                failed.append(bag_obj.bag_tag)
+        reasoning = "Fallback: no rerouting flights seeded — used naive sequential lookup."
 
     return {
         "rebooked": rebooked,
         "rebooking_failed": failed,
         "actions_taken": [{
-            "node": "rebook_bags", "tool": "schedule+bhs",
+            "node": "rebook_bags", "tool": "mip_rerouter+schedule+bhs",
             "result": (
-                f"Rebooked {len(rebooked)}/{len(all_tags)} bags on next available flights. "
-                f"Failed: {len(failed)}."
+                f"MIP rerouting: {len(rebooked)}/{len(all_tags)} bags assigned to "
+                f"next available flights. Failed: {len(failed)}. {reasoning}"
             ),
             "rebooked_count": len(rebooked),
         }],

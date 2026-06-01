@@ -20,6 +20,7 @@ from src.tools import store
 from src.models import (
     Bag, BagStatus, Flight, FlightStatus, LoadPlan, TransferConnection, CrewStatus,
 )
+from src.solver.rerouter import FlightLeg
 
 
 def load(now: datetime | None = None) -> None:
@@ -60,6 +61,18 @@ def load(now: datetime | None = None) -> None:
         estimated_departure=now + timedelta(minutes=40),
         gate="C8", terminal="C", status=FlightStatus.ON_TIME,
     )
+
+    # ── Rerouting flights (for MIP layer — bags that miss their connection) ──────
+    # These are flights that missed bags can be put on.
+    # The MIP rerouter (Tier 2b) assigns bags to these flights optimally.
+
+    store.REROUTING_FLIGHTS.extend([
+        FlightLeg("AA503", "JFK", "LHR", departs_in_minutes=120,  remaining_capacity=15),
+        FlightLeg("AA601", "JFK", "LHR", departs_in_minutes=480,  remaining_capacity=30),
+        FlightLeg("AA504", "JFK", "CDG", departs_in_minutes=240,  remaining_capacity=12),
+        FlightLeg("AA602", "JFK", "CDG", departs_in_minutes=720,  remaining_capacity=25),
+        FlightLeg("AA701", "JFK", "LHR", departs_in_minutes=1440, remaining_capacity=50),
+    ])
 
     # ── Load plans ────────────────────────────────────────────────────────────
 
