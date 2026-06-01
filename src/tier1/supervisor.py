@@ -31,12 +31,18 @@ from src.tier2.baggage_coordinator import build_baggage_coordinator
 from src.tier2.ramp_coordinator import build_ramp_coordinator
 from src.tier2.dispatch_coordinator import build_dispatch_coordinator
 from src.tier2.comms_coordinator import build_comms_coordinator
+from src.tier2.gate_change_coordinator import build_gate_change_coordinator
+from src.tier2.loading_failure_coordinator import build_loading_failure_coordinator
+from src.tier2.equipment_coordinator import build_equipment_coordinator
 
 _COORDINATOR_BUILDERS = {
     "baggage_coordinator": build_baggage_coordinator,
     "ramp_coordinator": build_ramp_coordinator,
     "dispatch_coordinator": build_dispatch_coordinator,
     "comms_coordinator": build_comms_coordinator,
+    "gate_change_coordinator": build_gate_change_coordinator,
+    "loading_failure_coordinator": build_loading_failure_coordinator,
+    "equipment_coordinator": build_equipment_coordinator,
 }
 
 _CONFLICT_PAIRS = {

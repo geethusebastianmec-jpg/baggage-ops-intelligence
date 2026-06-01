@@ -32,11 +32,39 @@ def _delay_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
 
 
 def _gate_change_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
-    flight_id = event.payload.get("flight_id", "")
     base = {"disruption_id": event.event_id, "actions_taken": []}
     return {
-        "ramp_coordinator": {**base, "from_flight": flight_id, "bag_tags": [], "to_flight": "", "zone": "B"},
-        "comms_coordinator": {**base, "notifications": []},
+        "gate_change_coordinator": {
+            **base,
+            "flight_id": event.payload.get("flight_id", ""),
+            "old_gate": event.payload.get("old_gate", ""),
+            "new_gate": event.payload.get("new_gate", ""),
+            "old_terminal": event.payload.get("old_terminal", "B"),
+            "new_terminal": event.payload.get("new_terminal", "B"),
+        },
+    }
+
+
+def _loading_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
+    base = {"disruption_id": event.event_id, "actions_taken": []}
+    return {
+        "loading_failure_coordinator": {
+            **base,
+            "bag_tag": event.payload.get("bag_tag", ""),
+            "flight_id": event.payload.get("flight_id", ""),
+        },
+    }
+
+
+def _equipment_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
+    base = {"disruption_id": event.event_id, "actions_taken": []}
+    return {
+        "equipment_coordinator": {
+            **base,
+            "equipment_id": event.payload.get("equipment_id", "UNKNOWN"),
+            "failed_zone": event.payload.get("zone", "B"),
+            "failure_type": event.payload.get("failure_type", "CONVEYOR"),
+        },
     }
 
 
@@ -73,7 +101,7 @@ PLAYBOOKS: list[Playbook] = [
     ),
     Playbook(
         name="GATE_CHANGE",
-        activate=["ramp_coordinator", "comms_coordinator"],
+        activate=["gate_change_coordinator"],
         condition=lambda e: e.event_type == DisruptionType.GATE_CHANGE,
         severity_threshold=Severity.LOW,
         build_inputs=_gate_change_inputs,
@@ -84,6 +112,20 @@ PLAYBOOKS: list[Playbook] = [
         condition=lambda e: e.event_type == DisruptionType.CANCELLATION,
         severity_threshold=Severity.CRITICAL,
         build_inputs=_cancellation_inputs,
+    ),
+    Playbook(
+        name="BAG_NOT_LOADED",
+        activate=["loading_failure_coordinator"],
+        condition=lambda e: e.event_type == DisruptionType.BAG_NOT_LOADED,
+        severity_threshold=Severity.HIGH,
+        build_inputs=_loading_failure_inputs,
+    ),
+    Playbook(
+        name="EQUIPMENT_FAILURE",
+        activate=["equipment_coordinator"],
+        condition=lambda e: e.event_type == DisruptionType.EQUIPMENT_FAILURE,
+        severity_threshold=Severity.MEDIUM,
+        build_inputs=_equipment_failure_inputs,
     ),
 ]
 

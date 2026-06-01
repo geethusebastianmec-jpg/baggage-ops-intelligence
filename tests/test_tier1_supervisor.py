@@ -96,7 +96,7 @@ def test_playbook_matches_gate_change():
     pb = match_playbook(event)
     assert pb is not None
     assert pb.name == "GATE_CHANGE"
-    assert "ramp_coordinator" in pb.activate
+    assert "gate_change_coordinator" in pb.activate
 
 
 def test_playbook_matches_cancellation():
