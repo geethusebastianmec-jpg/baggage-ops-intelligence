@@ -1,9 +1,19 @@
-"""Streamlit real-time dashboard — talks to the FastAPI backend via HTTP."""
+"""Baggage Ops Intelligence — Real-time AOCC-style dashboard.
+
+Design principles from real airline operations control centres:
+  - Dark background (ops room standard — reduces glare, status colors pop)
+  - Color-coded status: GREEN=confirmed, AMBER=at risk, RED=missed/critical
+  - Dense information layout (operators need max data at a glance)
+  - FIDS/BIDS-style tables for flights and bags
+  - Reverse-chronological event log (newest action at top)
+  - Single-purpose color coding (red means one thing only)
+"""
 from __future__ import annotations
 
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -17,11 +27,59 @@ from src.config import settings
 API = settings.api_url.rstrip("/")
 
 st.set_page_config(
-    page_title="Baggage Ops Intelligence by dCortex",
+    page_title="Baggage Ops Intelligence — dCortex",
     page_icon="🧳",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ── Aviation-grade CSS ─────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+  /* Global dark ops room feel */
+  .stApp { background-color: #0A0E1A; }
+
+  /* Flight status table rows */
+  .flight-row { display:flex; align-items:center; padding:6px 10px; border-radius:4px; margin:2px 0; font-family:monospace; font-size:0.85rem; border-left:4px solid transparent; }
+  .flight-delayed  { background:#1C1008; border-left-color:#FF6D00; }
+  .flight-ok       { background:#071510; border-left-color:#00C853; }
+  .flight-critical { background:#1A0808; border-left-color:#D50000; }
+
+  /* Bag status chips */
+  .bag-confirmed { background:#00C853; color:#000; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-missed    { background:#D50000; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-at-risk   { background:#FF6D00; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-safe      { background:#37474F; color:#90A4AE; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+
+  /* Event log rows */
+  .log-event    { color:#00C8FF; font-family:monospace; font-size:0.78rem; padding:2px 0; }
+  .log-action   { color:#90A4AE; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-ok       { color:#00C853; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-warn     { color:#FF6D00; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-critical { color:#D50000; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+
+  /* KPI cards */
+  .kpi-card { background:#111827; border:1px solid #1E293B; border-radius:8px; padding:12px 16px; text-align:center; }
+  .kpi-number { font-size:2rem; font-weight:bold; line-height:1; }
+  .kpi-label  { font-size:0.72rem; color:#64748B; text-transform:uppercase; letter-spacing:0.08em; margin-top:4px; }
+  .kpi-green  { color:#00C853; }
+  .kpi-red    { color:#D50000; }
+  .kpi-amber  { color:#FF6D00; }
+  .kpi-blue   { color:#00C8FF; }
+
+  /* Section headers */
+  .section-header { font-family:monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#475569; border-bottom:1px solid #1E293B; padding-bottom:4px; margin-bottom:8px; }
+
+  /* Status pill */
+  .status-live { background:#00C853; color:#000; font-size:0.65rem; font-weight:bold; padding:2px 8px; border-radius:10px; }
+  .status-idle { background:#37474F; color:#90A4AE; font-size:0.65rem; padding:2px 8px; border-radius:10px; }
+
+  /* Hide Streamlit chrome for cleaner look */
+  #MainMenu { visibility:hidden; }
+  footer { visibility:hidden; }
+  .stDeployButton { display:none; }
+</style>
+""", unsafe_allow_html=True)
 
 # ── Session state ──────────────────────────────────────────────────────────────
 for key, default in [
@@ -31,94 +89,6 @@ for key, default in [
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
-
-
-# ── Hero ───────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div style="text-align:center; padding: 1.5rem 0 0.5rem 0;">
-  <h1 style="font-size:2.4rem; margin-bottom:0.2rem;">🧳 Baggage Ops Intelligence</h1>
-  <p style="font-size:1.1rem; color:#888; margin-top:0;">
-    Autonomous AI coordination for airline baggage operations &nbsp;·&nbsp; Powered by dCortex
-  </p>
-</div>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-# ── What is this? ──────────────────────────────────────────────────────────────
-with st.container():
-    ia, ib, ic = st.columns(3)
-    with ia:
-        st.markdown("### The Problem")
-        st.markdown(
-            "Airlines mishandle **33 million bags per year** at a cost of **$5 billion**. "
-            "The biggest cause — **41% of all failures** — is transfer misconnections: "
-            "a flight arrives late and no one coordinates fast enough to get bags onto the connecting flight. "
-            "Today a human AOCC coordinator handles this with four sequential phone calls. "
-            "By the time all four are done, the window is gone."
-        )
-    with ib:
-        st.markdown("### The Solution")
-        st.markdown(
-            "This system replaces those four phone calls with one automated coordinator that "
-            "acts across all domains **simultaneously**, in under 3 seconds. "
-            "It uses **deterministic triage** (pure math — no AI needed for the easy part), "
-            "a **CP-SAT constraint solver** for crew contention, and "
-            "**Gemini Pro only for genuinely novel situations** that no pre-written playbook covers."
-        )
-    with ic:
-        st.markdown("### What You Can Do Here")
-        st.markdown(
-            "**Run the Hub Crisis scenario** to watch the system act in real time. "
-            "Three flights arrive late simultaneously at JFK. 12 bags are at risk. "
-            "The system detects which bags are physically impossible to save (pure math), "
-            "rushes the ones that can make it, and pre-notifies every passenger — "
-            "all before a human coordinator would finish their first phone call."
-        )
-
-st.divider()
-
-# ── Measurement callout ────────────────────────────────────────────────────────
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Bags recovered", "74%", "+40% vs manual",
-          help="System recovers 74% of at-risk bags. Manual baseline: 34%. Source: demo/replay.py across 5 scenarios.")
-m2.metric("Decision time", "2.5 s", "-177 s vs manual",
-          help="Median time from event arrival to all actions dispatched. Manual baseline: ~3 minutes per phone call.")
-m3.metric("Disruption types handled", "8", "all workflows built",
-          help="Delay, gate change, cancellation, equipment failure, loading failure, crew shortage, security hold, network cascade.")
-m4.metric("Tests passing", "83", "deterministic",
-          help="All 83 tests pass without mocking the LLM. Triage and CP-SAT are deterministic — same input always produces same output.")
-
-st.divider()
-
-# ── Live Demo ─────────────────────────────────────────────────────────────────
-st.markdown("## Live Demo — JFK Hub Crisis")
-st.markdown(
-    "Three inbound flights are delayed. Two outbound flights depart soon. "
-    "The system must decide which bags can still make it and act before the departure windows close."
-)
-
-st.markdown("#### Current Flight Status")
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("AA401  ORD → JFK", "DELAYED", "+32 min", delta_color="inverse",
-          help="32-min delay. 7 bags connecting to AA501. 5 are in Zone B (8-min move time, slack=+17). 2 are in Zone D (26-min move time, slack=-1 — physically impossible).")
-c2.metric("AA402  LAX → JFK", "DELAYED", "+18 min", delta_color="inverse",
-          help="18-min delay. 3 bags in Zone B connecting to AA501. Move time 8 min, window 25 min, slack=+17. All recoverable.")
-c3.metric("AA403  MIA → JFK", "DELAYED", "+11 min", delta_color="inverse",
-          help="11-min delay. 2 bags in Zone C connecting to AA502. Move time 10 min, window 40 min, slack=+30. No action needed.")
-c4.metric("AA501  JFK → LHR", "ON TIME", "departs in 25 min",
-          help="London flight. 10 bags from AA401 and AA402 need to transfer here.")
-c5.metric("AA502  JFK → CDG", "ON TIME", "departs in 40 min",
-          help="Paris flight. 2 bags from AA403. Comfortable 30-min slack — no intervention required.")
-
-st.caption(
-    "**How the system decides:** For each bag, `slack = departure_window − physical_move_time`. "
-    "Slack ≥ 0 → can be rushed. Slack < 0 → physically impossible. "
-    "This is arithmetic, not an AI judgment. "
-    "If more bags are recoverable than the crew can handle simultaneously, "
-    "a CP-SAT solver picks the optimal subset."
-)
-st.divider()
 
 
 # ── API helpers ────────────────────────────────────────────────────────────────
@@ -131,10 +101,8 @@ def _api_health() -> bool:
 
 def _trigger_scenario() -> bool:
     try:
-        r = requests.post(f"{API}/scenario/run", timeout=10)
-        return r.status_code == 200
+        return requests.post(f"{API}/scenario/run", timeout=10).status_code == 200
     except Exception:
-        st.error(f"Could not reach the backend API at `{API}`. Make sure all services are running.")
         return False
 
 
@@ -147,95 +115,201 @@ def _poll_state() -> dict | None:
 
 def _node_icon(node: str) -> str:
     icons = {
-        "prepare_context": "🔍",
-        "fetch_departure": "🕐",
-        "fetch_ramp": "👷",
-        "triage_and_optimize": "🧮",   # V2: deterministic triage + CP-SAT
-        "close_loop": "✅",             # V2: confirming scan
-        "route_bags": "🚀",
-        "flag_missed": "❌",
-        "check_crew": "👷",
-        "pull_adjacent_crew": "🔄",    # V2: crew shortage — adjacent zone pull
-        "assign_task": "🚜",
-        "escalate": "⚠️",
-        "decide_hold": "✈️",
-        "fetch_load_plan": "📋",
-        "fetch_departure_window": "🕐",
-        "send_notifications": "📱",
-        "notify_passenger": "📱",
-        "notify_ops": "📢",
-        "notify_baggage_service": "📢",
-        "find_affected_bags": "🔍",
-        "divert_bags": "↩️",
-        "reassign_crew": "🔄",
-        "update_load_plan": "📋",
-        "find_all_bags": "🔍",
-        "rebook_bags": "🎫",
-        "offload_loaded": "📦",
-        "notify_passengers": "📱",
-        "locate_bag": "🔍",
-        "check_flight": "✈️",
-        "emergency_load": "🚨",
-        "rebook_bag": "🎫",
-        "rebook_on_next_flight": "🎫",
-        "place_hold": "🔒",
-        "escalate_to_authority": "🚨",
-        "find_impacted_bags": "🔍",
-        "reroute_bags": "↩️",
-        "alert_maintenance": "🔧",
-        "assess_impact": "🧮",
-        "aggregate_cascade": "🌐",
-        "joint_triage": "🧮",
-        "joint_optimize": "⚡",
-        "dispatch_all": "🚀",
+        "prepare_context": "QRY", "fetch_departure": "CLK", "fetch_ramp": "CRW",
+        "triage_and_optimize": "TRG", "close_loop": "CNF", "route_bags": "RTE",
+        "flag_missed": "MSD", "check_crew": "CRW", "pull_adjacent_crew": "ADJ",
+        "assign_task": "TSK", "escalate": "ESC", "decide_hold": "HLD",
+        "fetch_load_plan": "LDP", "send_notifications": "SMS",
+        "find_affected_bags": "QRY", "divert_bags": "DVT", "reassign_crew": "ADJ",
+        "update_load_plan": "LDP", "find_all_bags": "QRY", "rebook_bags": "RBK",
+        "offload_loaded": "OFL", "notify_passengers": "SMS", "locate_bag": "LOC",
+        "check_flight": "CHK", "emergency_load": "EMG", "rebook_bag": "RBK",
+        "rebook_on_next_flight": "RBK", "place_hold": "HLD",
+        "escalate_to_authority": "SEC", "find_impacted_bags": "QRY",
+        "reroute_bags": "DVT", "alert_maintenance": "MNT", "assess_impact": "TRG",
+        "aggregate_cascade": "AGG", "joint_triage": "TRG",
+        "joint_optimize": "OPT", "dispatch_all": "RTE",
     }
     for key, icon in icons.items():
         if key in node.lower():
-            return icon
-    return "🤖"
+            return f"[{icon}]"
+    return "[AGT]"
 
 
-def _notif_icon(notif_type: str) -> str:
-    return {"RECOVERED": "✅", "AT_RISK": "⚠️", "MISSED": "❌"}.get(notif_type, "📱")
+def _log_class(node: str, result: str) -> str:
+    r = result.lower()
+    if any(w in r for w in ("confirmed", "routed", "saved", "rebooked", "recovered")):
+        return "log-ok"
+    if any(w in r for w in ("missed", "failed", "error", "unavailable")):
+        return "log-critical"
+    if any(w in r for w in ("at risk", "tight", "contention", "escalat")):
+        return "log-warn"
+    return "log-action"
 
 
-# ── Agent activity + bag board ────────────────────────────────────────────────
-left, right = st.columns([3, 2])
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).strftime("%H:%M:%S")
 
-with left:
-    st.markdown("#### Agent Activity Timeline")
-    st.caption(
-        "Each line is a real action taken by an AI agent — "
-        "querying baggage systems, running triage arithmetic, "
-        "opening exception routing, assigning ramp crew, or notifying passengers. "
-        "No LLM is called for the feasibility decision — that is pure math."
+
+# ── Header ─────────────────────────────────────────────────────────────────────
+h1, h2, h3 = st.columns([4, 2, 2])
+with h1:
+    st.markdown(
+        "### 🧳  BAGGAGE OPS INTELLIGENCE &nbsp; "
+        "<span style='color:#475569;font-size:0.8rem;font-weight:normal;'>by dCortex</span>",
+        unsafe_allow_html=True,
+    )
+with h2:
+    api_ok = _api_health()
+    status_html = (
+        '<span class="status-live">● LIVE</span>'
+        if api_ok else
+        '<span class="status-idle">○ OFFLINE</span>'
+    )
+    st.markdown(f"<div style='padding-top:8px;'>{status_html} &nbsp; JFK Hub</div>",
+                unsafe_allow_html=True)
+with h3:
+    st.markdown(
+        f"<div style='text-align:right;padding-top:8px;color:#475569;font-family:monospace;font-size:0.8rem;'>"
+        f"UTC {_utcnow()}</div>",
+        unsafe_allow_html=True,
     )
 
+st.markdown("<hr style='border-color:#1E293B;margin:4px 0 12px 0;'>", unsafe_allow_html=True)
+
+# ── KPI strip ─────────────────────────────────────────────────────────────────
+k1, k2, k3, k4, k5, k6 = st.columns(6)
+
+_kpis = [
+    (k1, "74%",  "+40 vs manual", "RECOVERY RATE", "kpi-green"),
+    (k2, "2.5s", "vs 3 min manual", "DECISION TIME", "kpi-blue"),
+    (k3, "12",   "AA401/402/403", "BAGS AT RISK", "kpi-amber"),
+    (k4, "8",    "all workflows built", "DISRUPTION TYPES", "kpi-blue"),
+    (k5, "83",   "all passing", "TESTS", "kpi-green"),
+    (k6, "$5B",  "industry problem", "ANNUAL COST", "kpi-red"),
+]
+for col, num, sub, label, cls in _kpis:
+    with col:
+        st.markdown(
+            f"<div class='kpi-card'>"
+            f"<div class='kpi-number {cls}'>{num}</div>"
+            f"<div style='font-size:0.7rem;color:#94A3B8;margin:2px 0;'>{sub}</div>"
+            f"<div class='kpi-label'>{label}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+# ── Main grid: Flight board | Activity log | Bag board ────────────────────────
+col_flights, col_log, col_bags = st.columns([2, 3, 2])
+
+# ── FLIGHTS (FIDS-style) ───────────────────────────────────────────────────────
+with col_flights:
+    st.markdown("<div class='section-header'>FLIGHT STATUS BOARD</div>", unsafe_allow_html=True)
+
+    flights = [
+        ("AA401", "ORD→JFK", "DELAYED", "+32m", "7 bags → AA501", "delayed"),
+        ("AA402", "LAX→JFK", "DELAYED", "+18m", "3 bags → AA501", "delayed"),
+        ("AA403", "MIA→JFK", "DELAYED", "+11m", "2 bags → AA502", "ok"),
+        ("AA501", "JFK→LHR", "ON TIME", "−25m", "outbound · LHR", "ok"),
+        ("AA502", "JFK→CDG", "ON TIME", "−40m", "outbound · CDG", "ok"),
+    ]
+
+    for flt, route, status, delta, note, css_class in flights:
+        color = "#FF6D00" if css_class == "delayed" else "#00C853"
+        st.markdown(
+            f"<div class='flight-row flight-{css_class}'>"
+            f"<span style='color:{color};font-weight:bold;min-width:52px;display:inline-block;'>{flt}</span>"
+            f"<span style='color:#64748B;min-width:60px;display:inline-block;font-size:0.75rem;'>{route}</span>"
+            f"<span style='color:{color};min-width:60px;display:inline-block;font-size:0.75rem;'>{status}</span>"
+            f"<span style='color:#94A3B8;min-width:36px;display:inline-block;font-size:0.75rem;'>{delta}</span>"
+            f"<span style='color:#64748B;font-size:0.73rem;'>{note}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>TRIAGE LOGIC</div>", unsafe_allow_html=True)
+    st.markdown("""
+<div style='font-family:monospace;font-size:0.72rem;color:#475569;line-height:1.7;'>
+slack = window &minus; move_time<br>
+&nbsp;&nbsp;Zone&nbsp;B&nbsp;(8&nbsp;min)&nbsp;→&nbsp;slack&nbsp;+17&nbsp;✓<br>
+&nbsp;&nbsp;Zone&nbsp;D&nbsp;(26&nbsp;min)&nbsp;→&nbsp;slack&nbsp;&minus;1&nbsp;✗<br>
+<br>
+contention? → CP-SAT<br>
+no contention → route all
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>TIER LADDER</div>", unsafe_allow_html=True)
+    tiers = [
+        ("T0", "DB read", "#475569", "Where is bag X?"),
+        ("T1", "Rules", "#64748B", "Slack math · hold cost"),
+        ("T2", "CP-SAT", "#00C8FF", "Optimal subset under crew cap"),
+        ("T3", "Agent", "#7C3AED", "Sequences T1/T2"),
+        ("T4", "LLM", "#F59E0B", "Novel events only"),
+    ]
+    for tier, tool, color, desc in tiers:
+        st.markdown(
+            f"<div style='display:flex;gap:8px;align-items:center;margin:3px 0;font-family:monospace;font-size:0.72rem;'>"
+            f"<span style='color:{color};min-width:24px;'>{tier}</span>"
+            f"<span style='color:{color};min-width:52px;'>{tool}</span>"
+            f"<span style='color:#475569;'>{desc}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+
+# ── ACTIVITY LOG ───────────────────────────────────────────────────────────────
+with col_log:
+    st.markdown("<div class='section-header'>AGENT ACTIVITY LOG</div>", unsafe_allow_html=True)
+
     if not st.session_state.running and not st.session_state.done:
-        api_ok = _api_health()
         if not api_ok:
-            st.warning(
-                f"Backend API is not reachable at `{API}`. "
-                "If running locally: `.venv/Scripts/uvicorn src.api.main:app --port 8000`"
+            st.markdown(
+                "<div style='color:#FF6D00;font-family:monospace;font-size:0.8rem;'>⚠ API OFFLINE"
+                f" — {API}</div>",
+                unsafe_allow_html=True,
             )
-        st.markdown("")
-        if st.button(
-            "▶  Run Hub Crisis Scenario",
-            type="primary",
-            use_container_width=True,
-            disabled=not api_ok,
-            help="Publishes 3 flight delay events to Kafka. The worker agents process them and report back here.",
-        ):
-            if _trigger_scenario():
-                st.session_state.running = True
-                st.rerun()
+            st.caption("Start the API: `.venv/Scripts/uvicorn src.api.main:app --port 8000`")
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        btn_col, info_col = st.columns([2, 3])
+        with btn_col:
+            if st.button(
+                "▶  RUN HUB CRISIS",
+                type="primary",
+                use_container_width=True,
+                disabled=not api_ok,
+                help="Publishes 3 delay events to Kafka. Worker processes and reports back.",
+            ):
+                if _trigger_scenario():
+                    st.session_state.running = True
+                    st.rerun()
+        with info_col:
+            st.markdown(
+                "<div style='font-family:monospace;font-size:0.72rem;color:#475569;padding-top:8px;'>"
+                "3 DELAY EVENTS → KAFKA<br>"
+                "WORKER → TRIAGE → CP-SAT<br>"
+                "ACTIONS → AUDIT TOPIC"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(
+            "<div style='color:#1E293B;font-family:monospace;font-size:0.75rem;margin-top:24px;text-align:center;'>"
+            "— awaiting scenario trigger —"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
     elif st.session_state.running:
-        st.info(
-            "⚙️  Agents coordinating: events published to Kafka → worker picks them up → "
-            "Tier 1 triage (slack math) → CP-SAT if crew contended → "
-            "actions dispatched + audit records published back. "
-            "Refreshing every 2 seconds..."
+        st.markdown(
+            "<div style='color:#00C8FF;font-family:monospace;font-size:0.78rem;'>⚡ PROCESSING — KAFKA → AGENTS → AUDIT</div>",
+            unsafe_allow_html=True,
         )
         progress_slot = st.empty()
         timeline_slot = st.empty()
@@ -245,25 +319,30 @@ with left:
             if state:
                 recent = state.get("recent_events", [])
                 lines = []
-                for ev in recent:
+                for ev in reversed(recent):  # newest first
                     payload = ev.get("payload", {})
                     etype = ev.get("type", "")
-                    ts = ev.get("timestamp", "")[:19].replace("T", " ")
+                    ts = ev.get("timestamp", "")[:19].replace("T", " ")[11:]  # time only
                     if etype == "SCENARIO_STARTED":
-                        lines.append(f"`{ts}`  🚀  **3 delay events published to Kafka**")
+                        lines.append(f"<div class='log-event'>{ts}  ◆  SCENARIO STARTED — 3 events → Kafka</div>")
                     elif etype == "AUDIT_ACTION":
-                        node = payload.get("node", payload.get("coordinator", "agent"))
-                        result = str(payload.get("result", ""))[:100]
+                        node = payload.get("node", payload.get("coordinator", "?"))
+                        result = str(payload.get("result", ""))[:90]
                         icon = _node_icon(node)
-                        lines.append(f"`{ts}`  {icon}  `[{node}]`  {result}")
+                        css = _log_class(node, result)
+                        lines.append(
+                            f"<div class='{css}'>{ts}  {icon}  {node}  —  {result}</div>"
+                        )
 
-                timeline_slot.markdown(
-                    "\n\n".join(lines) if lines else "_Waiting for first Kafka message..._"
-                )
-                progress_slot.caption(
-                    f"Actions completed: **{state.get('action_count', 0)}**  ·  "
-                    f"Confirmed loaded: **{state.get('saved_count', 0)}**  ·  "
-                    f"Missed: **{state.get('missed_count', 0)}**"
+                html_log = "\n".join(lines) if lines else "<div class='log-action'>waiting for first Kafka message...</div>"
+                timeline_slot.markdown(html_log, unsafe_allow_html=True)
+                progress_slot.markdown(
+                    f"<div style='font-family:monospace;font-size:0.72rem;color:#475569;'>"
+                    f"ACTIONS: {state.get('action_count',0)} &nbsp;|&nbsp; "
+                    f"<span style='color:#00C853;'>CONFIRMED: {state.get('saved_count',0)}</span> &nbsp;|&nbsp; "
+                    f"<span style='color:#D50000;'>MISSED: {state.get('missed_count',0)}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
                 )
 
                 if state.get("action_count", 0) >= 3:
@@ -279,189 +358,185 @@ with left:
             time.sleep(2)
 
         st.session_state.running = False
-        st.warning("Timed out. The worker service may be starting up — try again in 30 seconds.")
+        st.warning("Timeout — worker may be starting up. Retry in 30s.")
 
     else:
-        for ev in st.session_state.events:
+        # Show log with newest-first
+        lines = []
+        for ev in reversed(st.session_state.events):
             etype = ev.get("type", "")
             payload = ev.get("payload", {})
-            ts = ev.get("timestamp", "")[:19].replace("T", " ")
+            ts = ev.get("timestamp", "")[:19].replace("T", " ")[11:]
             if etype == "SCENARIO_STARTED":
-                st.markdown(f"`{ts}`  🚀  **3 delay events published to Kafka**")
+                lines.append(f"<div class='log-event'>{ts}  ◆  SCENARIO STARTED — 3 events → Kafka</div>")
             elif etype == "AUDIT_ACTION":
-                node = payload.get("node", payload.get("coordinator", "agent"))
-                result = str(payload.get("result", ""))[:100]
+                node = payload.get("node", payload.get("coordinator", "?"))
+                result = str(payload.get("result", ""))[:90]
                 icon = _node_icon(node)
-                st.markdown(f"`{ts}`  {icon}  `[{node}]`  {result}")
+                css = _log_class(node, result)
+                lines.append(f"<div class='{css}'>{ts}  {icon}  {node}  —  {result}</div>")
 
-        st.markdown("")
-        if st.button("↺  Run the scenario again", use_container_width=True):
+        if lines:
+            st.markdown("\n".join(lines), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        if st.button("↺  RUN AGAIN", use_container_width=True):
             for key in ["running", "done", "events", "saved", "missed", "notifications", "action_count"]:
                 st.session_state[key] = [] if isinstance(st.session_state[key], list) \
                     else (False if isinstance(st.session_state[key], bool) else 0)
             st.rerun()
 
 
-with right:
-    st.markdown("#### Bag Outcome Board")
-    st.caption("Final status of all 12 bags that had connecting flights.")
+# ── BAG BOARD (BIDS-style) ─────────────────────────────────────────────────────
+with col_bags:
+    st.markdown("<div class='section-header'>BAG STATUS BOARD</div>", unsafe_allow_html=True)
+
+    bags_data = [
+        ("BA-001", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-002", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-003", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-004", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-005", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-006", "Zone D", "26m", "-1m",  "AA501", "UNRECOVERABLE"),
+        ("BA-007", "Zone D", "26m", "-1m",  "AA501", "UNRECOVERABLE"),
+        ("BA-008", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-009", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-010", "Zone B", "8m", "+17m", "AA501", "PENDING"),
+        ("BA-011", "Zone C", "10m", "+30m", "AA502", "SAFE"),
+        ("BA-012", "Zone C", "10m", "+30m", "AA502", "SAFE"),
+    ]
+
+    saved_set = set(st.session_state.saved)
+    missed_set = set(st.session_state.missed)
+
+    for tag, zone, move, slack, outbound, default_status in bags_data:
+        if tag in saved_set:
+            status = "CONFIRMED"
+            chip = f"<span class='bag-confirmed'>CONFIRMED</span>"
+        elif tag in missed_set:
+            status = "MISSED"
+            chip = f"<span class='bag-missed'>MISSED</span>"
+        elif default_status == "UNRECOVERABLE":
+            status = "UNRECOVERABLE"
+            chip = f"<span class='bag-missed'>IMPOSSIBLE</span>"
+        elif default_status == "SAFE":
+            chip = f"<span class='bag-safe'>SAFE</span>"
+        else:
+            chip = f"<span class='bag-at-risk'>AT RISK</span>"
+
+        st.markdown(
+            f"<div style='display:flex;align-items:center;gap:6px;padding:3px 0;font-family:monospace;font-size:0.72rem;'>"
+            f"<span style='color:#00C8FF;min-width:52px;'>{tag}</span>"
+            f"<span style='color:#475569;min-width:44px;'>{zone}</span>"
+            f"<span style='color:#334155;min-width:30px;'>slk{slack}</span>"
+            f"{chip}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
     if st.session_state.done:
         saved = st.session_state.saved
         missed = st.session_state.missed
         notifs = st.session_state.notifications
         total = len(saved) + len(missed)
+        pct = int(len(saved) / total * 100) if total else 0
 
-        ca, cb, cc = st.columns(3)
-        ca.metric("Confirmed loaded", len(saved), delta=f"+{len(saved)}",
-                  help="BHS confirming scan received — bag physically on outbound aircraft.")
-        cb.metric("Missed", len(missed), delta=f"-{len(missed)}", delta_color="inverse",
-                  help="Physical move time exceeded departure window. Passengers pre-notified.")
-        cc.metric("Notifications sent", len(notifs),
-                  help="AT_RISK (rushing), RECOVERED (confirmed), MISSED — all automatic.")
-
-        if total > 0:
-            pct = int(len(saved) / total * 100)
-            st.progress(pct / 100, text=f"Recovery rate: {pct}% of at-risk bags confirmed loaded")
-
-        st.markdown("")
-        if saved:
-            with st.expander(f"✅  {len(saved)} bags confirmed loaded on outbound aircraft", expanded=True):
-                for tag in saved:
-                    st.markdown(f"- `{tag}` — exception routing → ramp sprint → confirming scan received")
-        if missed:
-            with st.expander(f"❌  {len(missed)} bags — move time exceeded departure window"):
-                for tag in missed:
-                    st.markdown(f"- `{tag}` — Zone D position, 26-min move time, window only 25 min")
-        if notifs:
-            with st.expander(f"📱  {len(notifs)} automatic passenger notifications"):
-                for n in notifs:
-                    icon = _notif_icon(n.get("type", ""))
-                    label = {"RECOVERED": "bag confirmed on aircraft",
-                             "AT_RISK": "bag being rushed — update to follow",
-                             "MISSED": "bag missed connection — delivery arranged"}.get(n.get("type", ""), n.get("type", ""))
-                    st.caption(f"{icon}  `{n['passenger_id']}`  ·  `{n['bag_tag']}`  —  {label}")
-
-    elif st.session_state.running:
-        state = _poll_state()
-        if state:
-            ca, cb = st.columns(2)
-            ca.metric("Confirmed so far", state.get("saved_count", 0))
-            cb.metric("Missed so far", state.get("missed_count", 0))
-        st.caption("Updates every 2 seconds as agents complete their work.")
-    else:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>OUTCOME</div>", unsafe_allow_html=True)
         st.markdown(
-            "Once you run the scenario, you'll see:\n"
-            "- Which bags were confirmed loaded on the outbound aircraft\n"
-            "- Which bags' move time exceeded the departure window\n"
-            "- All three notification types: AT_RISK → RECOVERED or MISSED\n"
-            "- The recovery rate vs the at-risk count"
+            f"<div style='font-family:monospace;font-size:0.8rem;'>"
+            f"<span style='color:#00C853;'>✓ {len(saved)} CONFIRMED</span><br>"
+            f"<span style='color:#D50000;'>✗ {len(missed)} MISSED</span><br>"
+            f"<span style='color:#00C8FF;'>📱 {len(notifs)} NOTIFIED</span><br>"
+            f"<span style='color:#64748B;'>RATE: {pct}%</span>"
+            f"</div>",
+            unsafe_allow_html=True,
         )
 
-st.divider()
+        if notifs:
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>NOTIFICATIONS</div>", unsafe_allow_html=True)
+            type_color = {"RECOVERED": "#00C853", "AT_RISK": "#FF6D00", "MISSED": "#D50000"}
+            for n in notifs[-8:]:  # show last 8
+                t = n.get("type", "")
+                color = type_color.get(t, "#64748B")
+                st.markdown(
+                    f"<div style='font-family:monospace;font-size:0.7rem;color:{color};'>"
+                    f"{t[:3]}  {n['passenger_id']}  {n['bag_tag']}"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
 
-# ── Human Override ─────────────────────────────────────────────────────────────
-with st.expander("🎮  Human Override Panel  —  intervene in any agent decision"):
-    st.caption(
-        "In production, an airline operations controller can override any agent decision at any time. "
-        "Decisions operate in Advisory → Semi-autonomous → Full autonomous modes. "
-        "This demo is in full-autonomous mode — every action runs without human approval. "
-        "Use this panel to inject a manual override into the live event stream."
-    )
-    oc1, oc2 = st.columns(2)
-    with oc1:
-        decision = st.selectbox(
-            "Decision", ["HOLD", "DEPART", "ESCALATE"],
-            help="HOLD = delay departure to wait for bags ($500/min). DEPART = let it go. ESCALATE = send to AOCC supervisor."
+
+# ── Bottom panels ──────────────────────────────────────────────────────────────
+st.markdown("<hr style='border-color:#1E293B;margin:12px 0;'>", unsafe_allow_html=True)
+
+bot1, bot2, bot3 = st.columns([2, 2, 3])
+
+with bot1:
+    with st.expander("🎮  HUMAN OVERRIDE"):
+        decision = st.selectbox("DECISION", ["HOLD", "DEPART", "ESCALATE"], label_visibility="collapsed")
+        target = st.text_input("FLIGHT", "AA501", label_visibility="collapsed")
+        operator = st.text_input("OPERATOR", "OPS-001", label_visibility="collapsed")
+        note = st.text_input("NOTE", placeholder="reason...", label_visibility="collapsed")
+        if st.button("SUBMIT OVERRIDE", use_container_width=True):
+            try:
+                requests.post(f"{API}/override",
+                              json={"decision": decision, "target": target,
+                                    "operator": operator, "note": note}, timeout=5)
+                st.success(f"{decision} on {target}")
+            except Exception:
+                st.error("API unreachable")
+
+with bot2:
+    with st.expander("📋  WORKFLOWS COVERED"):
+        for w, label, status in [
+            ("W1", "Flight delay → triage + CP-SAT", "✓"),
+            ("W2", "Gate change → BHS divert",       "✓"),
+            ("W3", "Cancellation → rebook + offload", "✓"),
+            ("W4", "Equipment failure → reroute",     "✓"),
+            ("W5", "Loading failure → emergency load", "✓"),
+            ("W6", "Crew shortage → adjacent pull",   "✓"),
+            ("W7", "Security hold → HITL gate",       "✓"),
+            ("W8", "Network cascade → joint CP-SAT",  "✓"),
+        ]:
+            st.markdown(
+                f"<div style='font-family:monospace;font-size:0.72rem;color:#475569;'>"
+                f"<span style='color:#00C853;'>{status}</span> {w}: {label}</div>",
+                unsafe_allow_html=True,
+            )
+
+with bot3:
+    with st.expander("⚙️  STACK"):
+        stack = [
+            ("LangGraph", "DAG execution + supervisor"),
+            ("OR-Tools CP-SAT", "Optimal bag recovery solver"),
+            ("Gemini 1.5 Pro", "Novel events only — Tier 4"),
+            ("Redpanda", "Kafka-compatible event bus"),
+            ("FastAPI", "Backend + WebSocket"),
+            ("PostgreSQL", "LangGraph checkpoints"),
+            ("Redis", "Working memory"),
+        ]
+        for tech, role in stack:
+            st.markdown(
+                f"<div style='font-family:monospace;font-size:0.72rem;'>"
+                f"<span style='color:#00C8FF;'>{tech}</span>"
+                f"<span style='color:#334155;'> — {role}</span></div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            "<div style='font-family:monospace;font-size:0.7rem;color:#475569;margin-top:8px;'>"
+            "Measured: +40% recovery vs manual baseline<br>"
+            "2.5s decision vs ~3 min manual<br>"
+            "83 tests · 8 workflows · all deterministic"
+            "</div>",
+            unsafe_allow_html=True,
         )
-        target = st.text_input("Target flight", "AA501")
-    with oc2:
-        operator = st.text_input("Operator ID", "OPS-001")
-        note = st.text_area("Reason / note", height=68, placeholder="e.g. VIP passenger on AA401 — hold 3 min")
-    if st.button("Submit Override", help="Injects this decision into the live event stream."):
-        try:
-            requests.post(f"{API}/override",
-                          json={"decision": decision, "target": target,
-                                "operator": operator, "note": note}, timeout=5)
-            st.success(f"Override submitted — {decision} on {target} by {operator}")
-        except Exception as exc:
-            st.error(f"Could not reach API: {exc}")
-
-# ── System capabilities ────────────────────────────────────────────────────────
-st.divider()
-with st.expander("📋  System Capabilities — all 8 disruption workflows"):
-    st.markdown(
-        "The Hub Crisis demo shows Workflow 1. The system handles 7 more disruption types "
-        "with the same tier-based architecture."
-    )
-    st.markdown("""
-| Workflow | Trigger | What happens |
-|---|---|---|
-| **W1: Flight delay** | Inbound delayed | Slack triage per bag → CP-SAT if crew contended → exception routing → confirming scan |
-| **W2: Gate change** | Departure gate changes | Find bags sorted to old chute → BHS divert → crew reassignment → load plan update |
-| **W3: Cancellation** | Flight cancelled | Find all bags → rebook on next flight ‖ off-load bags in hold → MISSED + ETA notify |
-| **W4: Equipment failure** | Belt/scanner fails | Identify impacted bags → reroute to alternate BHS path → maintenance alert → re-triage |
-| **W5: Loading failure** | Bag not loaded at origin | Locate bag → check if flight still at gate → emergency load or rebook |
-| **W6: Crew shortage** | No ramp crew in zone | Check adjacent zones (B↔C↔D) → pull crew before escalating to AOCC |
-| **W7: Security hold** | CT scanner flags bag | Place hold → parallel passenger + baggage service notify → HITL: cleared → rebook / rejected → law enforcement |
-| **W8: Network cascade** | Multiple inbounds delay → same outbound | Joint CP-SAT across ALL bags under true shared crew constraint (prevents N coordinators overpromising) |
-""")
-    st.caption(
-        "All workflows are deterministic (Tier 1 rules + Tier 2 CP-SAT). "
-        "Gemini Pro is only invoked when a compound event matches no pre-written playbook."
-    )
-
-# ── How it works ───────────────────────────────────────────────────────────────
-st.divider()
-with st.expander("⚙️  How this works — architecture and tech stack"):
-    ta, tb = st.columns(2)
-    with ta:
-        st.markdown("""
-**What happens when you click the button:**
-
-1. Dashboard POSTs to the **FastAPI** backend
-2. API publishes 3 delay events to **Kafka** (Redpanda)
-3. **Worker service** polls Kafka, receives events
-4. **Tier 1 Supervisor** matches each event to a playbook — no LLM
-5. Supervisor activates domain coordinators **in parallel**:
-   - **Baggage Coordinator** — fetches bags, runs **Tier 1 triage** (`slack = window − move_time`), runs **CP-SAT** only if crew is contended, opens exception routing
-   - **Ramp Coordinator** — checks crew, pulls from adjacent zone if needed, assigns task
-   - **Dispatch Coordinator** — cost comparison: `bags × $150 vs hold × $500/min`
-6. `close_loop` node: simulates confirming BHS scan → `CONFIRMED_LOADED` + RECOVERED notify
-7. Every action published to Kafka audit topic → API streams to dashboard
-
-**The key design principle:** Each question answered at the cheapest correct tier.
-Feasibility is arithmetic (Tier 1), not an AI judgment (Tier 4).
-        """)
-    with tb:
-        st.markdown("""
-**Technology stack:**
-
-| Layer | Technology | Role |
-|---|---|---|
-| Agent framework | **LangGraph** | DAG execution, hierarchical supervisor |
-| Feasibility solver | **OR-Tools CP-SAT** | Optimal bag recovery under crew contention |
-| LLM | **Gemini 1.5 Pro** | Novel compound events only — Tier 4 |
-| Event bus | **Redpanda** (Kafka) | Durable audit log, fan-out, replay |
-| Backend API | **FastAPI** | Scenario triggers, WebSocket stream |
-| Frontend | **Streamlit** | This dashboard |
-| Checkpoint store | **PostgreSQL** | LangGraph fault recovery |
-| Working memory | **Redis** | Shared agent state |
-
-**Measured improvement vs manual baseline:**
-
-Across 5 replay scenarios (`python demo/replay.py`):
-- System: **74%** bags recovered
-- Manual baseline: **34%** bags recovered
-- Improvement: **+40 percentage points**
-- Decision time: **2.5 seconds** vs **~3 minutes** manual
-        """)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
-st.markdown("")
 st.markdown(
-    "<div style='text-align:center; color:#888; font-size:0.85rem; padding-bottom:1rem;'>"
-    "Built by <strong>dCortex</strong> · Operational Superintelligence for Airlines"
+    "<div style='text-align:center;color:#1E293B;font-family:monospace;font-size:0.65rem;padding:8px 0;'>"
+    "dCortex · Operational Superintelligence for Airlines · JFK Hub Demo"
     "</div>",
     unsafe_allow_html=True,
 )
