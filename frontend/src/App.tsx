@@ -119,7 +119,7 @@ export default function App() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
             {[
               { label: 'The Problem', text: 'A human AOCC coordinator makes four phone calls — baggage, ramp, dispatch, comms. Each 1–3 minutes. Sequential. By call four, bags have already missed their window.', accent: C.red },
-              { label: 'The Solution', text: 'The system activates all four coordinators simultaneously. Deterministic triage (arithmetic). CP-SAT for crew contention. MIP for rerouting missed bags. LLM only for genuinely novel events.', accent: C.blue },
+              { label: 'The Solution', text: 'Activates all coordinators simultaneously. Triage is arithmetic (not AI). CP-SAT for crew contention — CREW bags get IATA Priority 1. MIP for network rerouting of missed bags. Interline bags trigger partner airline IATA notification. GSP zones dispatch through their own handler API. LLM only for genuinely novel compound events.', accent: C.blue },
               { label: 'The Result', text: '+40% bags recovered vs. the manual baseline. 2.5-second decision time vs. ~3 minutes. 74% recovery rate vs. 34%. Every passenger notified automatically at each stage.', accent: C.green },
             ].map(({ label, text, accent }) => (
               <Card key={label} style={{ borderTop: `3px solid ${accent}` }}>
@@ -136,7 +136,7 @@ export default function App() {
             { num: '74%', sub: '+40% vs manual', label: 'Recovery rate', color: C.green },
             { num: '2.5s', sub: 'vs ~3 min manual', label: 'Decision time', color: C.blue },
             { num: '12', sub: 'AA401/402/403', label: 'Bags at risk', color: C.amber },
-            { num: '8', sub: 'all implemented', label: 'Disruption types', color: C.blue },
+            { num: '10', sub: 'all implemented', label: 'Disruption types', color: C.blue },
             { num: '94', sub: 'all passing', label: 'Tests', color: C.green },
             { num: '$5B', sub: 'industry / year', label: 'Cost of problem', color: C.red },
           ].map(({ num, sub, label, color }) => (
@@ -375,8 +375,8 @@ export default function App() {
 
         {/* ── 8. WORKFLOWS ── */}
         <Card style={{ marginBottom: 24 }}>
-          <SLabel>All 8 Disruption Workflows — Implemented</SLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+          <SLabel>All 10 Disruption Workflows — Implemented</SLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
             {WORKFLOWS.map(w => (
               <div key={w.id} style={{ background: '#f8fafc', borderRadius: 7, padding: '12px 14px', border: `1px solid ${C.border}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>

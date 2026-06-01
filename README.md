@@ -88,8 +88,8 @@ which bags can make it.
 | BA-008 → BA-010 (AA402) | Zone B | 8 min | **+7 min** | RUSH ✅ |
 | BA-011, BA-012 (AA403) | Zone C | 10 min | **+30 min** | No action needed ✅ |
 
-**Outcome:** 8 bags saved, 2 missed, 2 no-action. All affected passengers notified
-automatically — no human needed.
+**Outcome:** 8 bags saved, 2 missed, 4 no-action (AA403 bags including 2 interline).
+All affected passengers notified automatically — no human needed.
 
 ---
 
@@ -108,6 +108,10 @@ automatically — no human needed.
 | **Compound / novel event** | 🟡 Partial | Gemini Pro selects which coordinators to activate. NETWORK_CASCADE playbook handles the most common compound case (multiple delayed inbounds). Truly novel situations use LLM routing. |
 | **Security hold on a bag** | ✅ Full | `security_hold_coordinator`: place hold + notify → HITL gate → CLEARED (rebook) or REJECTED (escalate to law enforcement + compliance log). |
 | **Ramp crew shortage** | ✅ Full | `ramp_coordinator` upgraded: checks adjacent zones (B↔C↔D) before escalating. Logs original vs reassigned zone. Escalates to AOCC only when no crew in any adjacent zone. |
+| **Interline bag coordination** | ✅ Full | `interline_coordinator`: identifies cross-airline connections, sends IATA Type B alert to partner airline, alerts transfer desk. Flags bags for manual oversight even when slack is positive — no automated BHS control across airline boundaries. |
+| **GSP (Ground Service Provider)** | ✅ Full | `GroundHandler` enum (AIRLINE, SWISSPORT, MENZIES, DNATA). `ramp_coordinator` routes task assignment to `GSPTool` for outsourced zones (slower ETA, probabilistic acceptance) vs airline-direct ramp control. |
+| **Crew bag priority (IATA P1)** | ✅ Full | `TicketClass.CREW = 3.0` priority weight — deadheading/positioning crew bags given highest priority in CP-SAT and MIP rerouter per IATA standard. |
+| **Revenue-class weighting** | ✅ Full | 13-entry `PRIORITY_WEIGHTS` table: ticket class × frequent flyer tier. FIRST/PLATINUM=2.8 → ECONOMY/NONE=1.0. Used by CP-SAT (T2a) and MIP rerouter (T2b). |
 
 ### Passenger notification lifecycle
 
@@ -131,7 +135,7 @@ Each coordinator uses the correct decision tier internally — no LLM in the fea
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  Strategic Supervisor (Tier 3 + Tier 4)                          │
-│  Playbook registry — 7 known disruption types, no LLM            │
+│  Playbook registry — 9 known disruption types, no LLM            │
 │  Gemini 1.5 Pro — novel/compound events only (Tier 4)            │
 │  Cross-domain conflict arbitration                               │
 └────────────────────┬─────────────────────────────────────────────┘
@@ -264,20 +268,22 @@ baggage/
 ├── src/
 │   ├── config.py                   All settings (reads from .env)
 │   ├── worker.py                   Kafka consumer service entry point
-│   ├── models/                     Pydantic types — Flight, Bag, DisruptionEvent, etc.
-│   ├── tools/                      Tier 0: BHS, load plan, ramp, AODB mock wrappers
+│   ├── models/                     Pydantic types — Flight, Bag, TicketClass, GroundHandler, etc.
+│   ├── tools/                      Tier 0: BHS, load plan, ramp, AODB, GSP mock wrappers
 │   ├── solver/                     Tier 1 + 2: triage, CP-SAT, and MIP
 │   │   ├── triage.py               Tier 1: deterministic slack-based bag triage
 │   │   ├── optimizer.py            Tier 2a: OR-Tools CP-SAT — which bags to rush
 │   │   └── rerouter.py             Tier 2b: OR-Tools MIP (CBC) — which flight for missed bags
 │   ├── tier2/                      Domain coordinators (LangGraph DAGs)
 │   │   ├── baggage_coordinator.py         Delay: triage → CP-SAT → dispatch → close_loop
-│   │   ├── cancellation_coordinator.py    Cancellation: rebook + offload + notify
-│   │   ├── gate_change_coordinator.py     Gate change: divert bags + reassign crew
-│   │   ├── loading_failure_coordinator.py Not loaded: emergency load or rebook
+│   │   ├── cancellation_coordinator.py    Cancellation: MIP rebook + offload + notify
+│   │   ├── gate_change_coordinator.py     Gate change: BHS divert + crew reassign
+│   │   ├── loading_failure_coordinator.py Not loaded: emergency load or MIP rebook
 │   │   ├── equipment_coordinator.py       Belt/scanner: reroute + maintenance alert
 │   │   ├── network_cascade_coordinator.py Multi-inbound: joint CP-SAT
-│   │   ├── ramp_coordinator.py            Ramp: crew assign + adjacent-zone fallback
+│   │   ├── interline_coordinator.py       Cross-airline: IATA Type B alert + transfer desk
+│   │   ├── security_hold_coordinator.py   Security hold: HITL cleared/rejected gate
+│   │   ├── ramp_coordinator.py            Ramp: direct + GSP routing + adjacent-zone fallback
 │   │   ├── dispatch_coordinator.py
 │   │   └── comms_coordinator.py
 │   ├── tier1/                      Strategic Supervisor
@@ -292,14 +298,17 @@ baggage/
 │   ├── replay.py                   Measurement harness — system vs manual baseline
 │   └── dashboard.py                Streamlit real-time UI
 │
-├── tests/                          61 tests, all passing
+├── tests/                          94 tests, all passing
 ├── research/
-│   ├── explainer-for-beginners.md  ← Start here if new to this domain
-│   ├── airline-baggage-dcortex.md  Industry landscape + $5B problem
-│   ├── agentic-system-design.md    Architecture pattern decision + tradeoffs
-│   ├── tech-stack.md               Tech stack selection rationale
-│   ├── architecture-revision.md   Why V1 used LLM wrong + the correct V2 design
-│   └── remaining-workflows.md     8 disruption workflows — status, steps, build order
+│   ├── explainer-for-beginners.md      ← Start here if new to this domain
+│   ├── airline-baggage-dcortex.md      Industry landscape + $5B problem
+│   ├── agentic-system-design.md        Architecture pattern decision + tradeoffs
+│   ├── tech-stack.md                   Tech stack selection rationale
+│   ├── architecture-revision.md        Why V1 used LLM wrong + correct V2 design
+│   ├── remaining-workflows.md          8 disruption workflows — status + build order
+│   ├── mip-vs-cpsat.md                 When each solver is correct for baggage IROPS
+│   ├── validation-and-gaps.md          dCortex direction validation + production gaps
+│   └── dcortex-coverage-analysis.md   Full coverage table: what we built vs dCortex scope
 │
 ├── docker-compose.yml
 ├── Dockerfile.api / .worker / .dashboard

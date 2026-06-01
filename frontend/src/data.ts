@@ -21,26 +21,30 @@ export const BAGS: BagRow[] = [
   { tag:'BA-010', zone:'Zone B', moveMins:8,  slack:17,  outbound:'AA501', defaultStatus:'at-risk' },
   { tag:'BA-011', zone:'Zone C', moveMins:10, slack:30,  outbound:'AA502', defaultStatus:'safe' },
   { tag:'BA-012', zone:'Zone C', moveMins:10, slack:30,  outbound:'AA502', defaultStatus:'safe' },
+  { tag:'BA-013', zone:'Zone C', moveMins:10, slack:30,  outbound:'LH dep', defaultStatus:'safe' },   // interline → LH
+  { tag:'BA-014', zone:'Zone C', moveMins:10, slack:30,  outbound:'LH dep', defaultStatus:'safe' },   // interline → LH
 ]
 
 export const WORKFLOWS = [
   { id:'W1', name:'Flight delay',        desc:'Triage (slack math) → CP-SAT if crew contended → exception routing → confirming scan' },
   { id:'W2', name:'Gate change',         desc:'Find bags sorted to old chute → BHS divert → crew reassignment → load plan' },
-  { id:'W3', name:'Cancellation',        desc:'Rebook on next available flight ‖ off-load bags already in hold → MISSED notify' },
+  { id:'W3', name:'Cancellation',        desc:'MIP rebook on next flight ‖ off-load bags already in hold → MISSED notify' },
   { id:'W4', name:'Equipment failure',   desc:'Identify impacted bags → alternate BHS path → maintenance alert → re-triage' },
-  { id:'W5', name:'Loading failure',     desc:'Locate bag → check if flight still at gate → emergency load or rebook' },
+  { id:'W5', name:'Loading failure',     desc:'Locate bag → check if flight still at gate → emergency load or MIP rebook' },
   { id:'W6', name:'Crew shortage',       desc:'Check adjacent zones (B↔C↔D) before escalating to AOCC supervisor' },
   { id:'W7', name:'Security hold',       desc:'Place hold → notify passenger + baggage service → HITL: cleared→rebook / rejected→law enforcement' },
   { id:'W8', name:'Network cascade',     desc:'Joint CP-SAT across ALL at-risk bags from multiple delayed inbounds under shared crew constraint' },
+  { id:'W9', name:'Interline bags',      desc:'IATA Type B alert to partner airline · transfer desk alert · passengers flagged even with positive slack (no direct BHS control cross-airline)' },
+  { id:'W10', name:'GSP coordination',  desc:'Airline-direct vs Swissport/Menzies/dnata dispatch routing · GSP zones have longer ETA and probabilistic SLA' },
 ]
 
 export const TIERS = [
-  { id:'T0',  tool:'DB read',  color:'#64748b', desc:'Where is bag X right now?' },
-  { id:'T1',  tool:'Rules',    color:'#64748b', desc:'Is this bag at risk?  slack = window − move_time  ·  Hold vs depart cost' },
-  { id:'T2a', tool:'CP-SAT',   color:'#0066cc', desc:'Which bags to rush under ramp crew contention? (resource assignment)' },
-  { id:'T2b', tool:'MIP',      color:'#0284c7', desc:'Which flight for each missed bag? (multi-commodity flow, capacity-constrained)' },
-  { id:'T3',  tool:'Agent',    color:'#7c3aed', desc:'Which workflows to activate and in what order?' },
-  { id:'T4',  tool:'LLM',      color:'#d97706', desc:'Novel compound events no playbook covers — routing only' },
+  { id:'T0',  tool:'DB read',  color:'#64748b', desc:'Where is bag X? Crew status? GSP or airline-direct?' },
+  { id:'T1',  tool:'Rules',    color:'#64748b', desc:'slack = window − move_time · Hold vs depart cost ($150/bag vs $500/min)' },
+  { id:'T2a', tool:'CP-SAT',   color:'#0066cc', desc:'Which bags to rush under crew contention? CREW bags prioritised (IATA P1)' },
+  { id:'T2b', tool:'MIP',      color:'#0284c7', desc:'Which flight for each missed bag? Capacity-constrained, priority-weighted' },
+  { id:'T3',  tool:'Agent',    color:'#7c3aed', desc:'Sequences T1/T2 · Routes to GSP or airline-direct · Activates interline coordinator' },
+  { id:'T4',  tool:'LLM',      color:'#d97706', desc:'Novel compound events no playbook covers — routing only, never computes' },
 ]
 
 export const NODE_LABELS: Record<string, string> = {
