@@ -45,34 +45,63 @@ def _push(event_type: str, payload: dict[str, Any]) -> None:
 # ── Background Kafka audit consumer ──────────────────────────────────────────
 
 def _start_audit_consumer() -> None:
-    """Runs in a daemon thread; polls ops.audit.actions → pushes to WebSocket queue."""
-    try:
-        from confluent_kafka import Consumer, KafkaError
-        from src.events.kafka_config import consumer_config
-        from src.events.topics import Topics
+    """Runs in a daemon thread; polls ops.audit.actions → pushes to WebSocket queue.
 
-        consumer = Consumer(consumer_config("api-audit-reader", auto_offset_reset="latest"))
-        consumer.subscribe([Topics.AUDIT_ACTIONS])
+    Retries with exponential backoff if Kafka is unavailable or topics don't
+    exist yet. Suppresses UNKNOWN_TOPIC errors (topic will appear after make topics).
+    """
+    import time as _time
+    from confluent_kafka import Consumer, KafkaError
+    from src.events.kafka_config import consumer_config
+    from src.events.topics import Topics
 
-        while True:
-            msg = consumer.poll(timeout=0.2)
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() != KafkaError._PARTITION_EOF:
-                    print(f"[AUDIT-CONSUMER] {msg.error()}")
-                continue
-            try:
-                payload = json.loads(msg.value().decode("utf-8"))
-                _push("AUDIT_ACTION", payload)
-            except Exception as exc:
-                print(f"[AUDIT-CONSUMER] parse error: {exc}")
-    except Exception as exc:
-        print(f"[AUDIT-CONSUMER] fatal: {exc}")
+    retry_delay = 5   # seconds between reconnect attempts
+    max_delay = 60
+
+    while True:
+        try:
+            consumer = Consumer(consumer_config("api-audit-reader", auto_offset_reset="latest"))
+            consumer.subscribe([Topics.AUDIT_ACTIONS])
+            print("[AUDIT-CONSUMER] subscribed to ops.audit.actions")
+            retry_delay = 5  # reset on successful connect
+
+            while True:
+                msg = consumer.poll(timeout=0.2)
+                if msg is None:
+                    continue
+                if msg.error():
+                    code = msg.error().code()
+                    if code == KafkaError._PARTITION_EOF:
+                        continue
+                    if code == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        # Topic not created yet — wait quietly and retry
+                        break
+                    print(f"[AUDIT-CONSUMER] error: {msg.error()}")
+                    continue
+                try:
+                    payload = json.loads(msg.value().decode("utf-8"))
+                    _push("AUDIT_ACTION", payload)
+                except Exception as exc:
+                    print(f"[AUDIT-CONSUMER] parse error: {exc}")
+
+        except Exception as exc:
+            # Kafka not reachable — retry silently
+            _ = exc  # suppress noisy traceback in startup logs
+
+        _time.sleep(retry_delay)
+        retry_delay = min(retry_delay * 2, max_delay)
 
 
 @app.on_event("startup")
 async def _on_startup() -> None:
+    # Try to create topics before the consumer starts — idempotent, safe to call repeatedly.
+    try:
+        from src.events.producer import ensure_topics_exist
+        ensure_topics_exist()
+        print("[API] Kafka topics verified.")
+    except Exception as exc:
+        print(f"[API] Kafka not reachable at startup — consumer will retry: {exc}")
+
     t = threading.Thread(target=_start_audit_consumer, daemon=True)
     t.start()
 
