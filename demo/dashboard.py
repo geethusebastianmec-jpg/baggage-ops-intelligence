@@ -33,46 +33,65 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── Light theme CSS ────────────────────────────────────────────────────────────
+# ── Typography + Light theme CSS ──────────────────────────────────────────────
 st.markdown("""
 <style>
-  /* Global white background */
-  .stApp { background-color: #FFFFFF; }
+  /* Font stacks:
+     - UI text (labels, captions, body): Inter / system sans-serif — clean, readable
+     - Codes, tags, log entries: monospace — scanning flight codes and bag tags
+  */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-  /* Flight status table rows */
-  .flight-row { display:flex; align-items:center; padding:6px 10px; border-radius:4px; margin:2px 0; font-family:monospace; font-size:0.85rem; border-left:4px solid transparent; }
+  :root {
+    --font-ui:   "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-code: "SFMono-Regular", "Cascadia Code", "Fira Code", Consolas, monospace;
+  }
+
+  .stApp { background-color: #FFFFFF; font-family: var(--font-ui); }
+
+  /* Flight status table rows — flight codes stay monospace, rest is sans */
+  .flight-row {
+    display:flex; align-items:center; padding:7px 10px; border-radius:5px;
+    margin:3px 0; border-left:4px solid transparent;
+    font-family: var(--font-ui); font-size:0.84rem;
+  }
   .flight-delayed  { background:#FFF7ED; border-left-color:#EA580C; }
   .flight-ok       { background:#F0FDF4; border-left-color:#16A34A; }
   .flight-critical { background:#FEF2F2; border-left-color:#DC2626; }
 
-  /* Bag status chips */
-  .bag-confirmed { background:#16A34A; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-missed    { background:#DC2626; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-at-risk   { background:#EA580C; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-safe      { background:#E2E8F0; color:#64748B; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  /* Bag status chips — pill badges */
+  .bag-confirmed { background:#16A34A; color:#fff; padding:3px 9px; border-radius:12px; font-size:0.72rem; font-weight:600; font-family: var(--font-ui); }
+  .bag-missed    { background:#DC2626; color:#fff; padding:3px 9px; border-radius:12px; font-size:0.72rem; font-weight:600; font-family: var(--font-ui); }
+  .bag-at-risk   { background:#EA580C; color:#fff; padding:3px 9px; border-radius:12px; font-size:0.72rem; font-weight:600; font-family: var(--font-ui); }
+  .bag-safe      { background:#E2E8F0; color:#64748B; padding:3px 9px; border-radius:12px; font-size:0.72rem; font-weight:600; font-family: var(--font-ui); }
 
-  /* Event log rows */
-  .log-event    { color:#0066CC; font-family:monospace; font-size:0.78rem; padding:2px 0; }
-  .log-action   { color:#64748B; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-ok       { color:#16A34A; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-warn     { color:#EA580C; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-critical { color:#DC2626; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  /* Event log — monospace for scanning, readable line height */
+  .log-event    { color:#0066CC; font-family: var(--font-code); font-size:0.8rem; padding:3px 0; line-height:1.5; }
+  .log-action   { color:#64748B; font-family: var(--font-code); font-size:0.78rem; padding:2px 0 2px 18px; line-height:1.5; }
+  .log-ok       { color:#16A34A; font-family: var(--font-code); font-size:0.78rem; padding:2px 0 2px 18px; line-height:1.5; }
+  .log-warn     { color:#EA580C; font-family: var(--font-code); font-size:0.78rem; padding:2px 0 2px 18px; line-height:1.5; }
+  .log-critical { color:#DC2626; font-family: var(--font-code); font-size:0.78rem; padding:2px 0 2px 18px; line-height:1.5; }
 
   /* KPI cards */
-  .kpi-card { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 16px; text-align:center; }
-  .kpi-number { font-size:2rem; font-weight:bold; line-height:1; }
-  .kpi-label  { font-size:0.72rem; color:#94A3B8; text-transform:uppercase; letter-spacing:0.08em; margin-top:4px; }
+  .kpi-card   { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px 16px; text-align:center; }
+  .kpi-number { font-size:2rem; font-weight:700; line-height:1; font-family: var(--font-ui); }
+  .kpi-sub    { font-size:0.73rem; color:#94A3B8; margin:3px 0; font-family: var(--font-ui); }
+  .kpi-label  { font-size:0.68rem; color:#CBD5E1; text-transform:uppercase; letter-spacing:0.1em; margin-top:5px; font-family: var(--font-ui); }
   .kpi-green  { color:#16A34A; }
   .kpi-red    { color:#DC2626; }
   .kpi-amber  { color:#EA580C; }
   .kpi-blue   { color:#0066CC; }
 
-  /* Section headers */
-  .section-header { font-family:monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#94A3B8; border-bottom:1px solid #E2E8F0; padding-bottom:4px; margin-bottom:8px; }
+  /* Section headers — small caps, sans */
+  .section-header {
+    font-family: var(--font-ui); font-size:0.68rem; font-weight:600;
+    text-transform:uppercase; letter-spacing:0.12em; color:#94A3B8;
+    border-bottom:1px solid #E2E8F0; padding-bottom:5px; margin-bottom:10px;
+  }
 
   /* Status pill */
-  .status-live { background:#16A34A; color:#fff; font-size:0.65rem; font-weight:bold; padding:2px 8px; border-radius:10px; }
-  .status-idle { background:#E2E8F0; color:#94A3B8; font-size:0.65rem; padding:2px 8px; border-radius:10px; }
+  .status-live { background:#16A34A; color:#fff; font-size:0.68rem; font-weight:600; padding:3px 10px; border-radius:12px; font-family: var(--font-ui); }
+  .status-idle { background:#E2E8F0; color:#94A3B8; font-size:0.68rem; padding:3px 10px; border-radius:12px; font-family: var(--font-ui); }
 
   /* Hide Streamlit chrome */
   #MainMenu { visibility:hidden; }
@@ -170,7 +189,7 @@ with h2:
                 unsafe_allow_html=True)
 with h3:
     st.markdown(
-        f"<div style='text-align:right;padding-top:8px;color:#64748B;font-family:monospace;font-size:0.8rem;'>"
+        f"<div style='text-align:right;padding-top:8px;color:#64748B;font-family:inherit;font-size:0.8rem;'>"
         f"UTC {_utcnow()}</div>",
         unsafe_allow_html=True,
     )
@@ -220,11 +239,11 @@ with col_flights:
         color = "#EA580C" if css_class == "delayed" else "#16A34A"
         st.markdown(
             f"<div class='flight-row flight-{css_class}'>"
-            f"<span style='color:{color};font-weight:bold;min-width:52px;display:inline-block;'>{flt}</span>"
-            f"<span style='color:#64748B;min-width:60px;display:inline-block;font-size:0.75rem;'>{route}</span>"
-            f"<span style='color:{color};min-width:60px;display:inline-block;font-size:0.75rem;'>{status}</span>"
-            f"<span style='color:#94A3B8;min-width:36px;display:inline-block;font-size:0.75rem;'>{delta}</span>"
-            f"<span style='color:#64748B;font-size:0.73rem;'>{note}</span>"
+            f"<span style='color:{color};font-weight:700;font-family:var(--font-code);min-width:52px;display:inline-block;font-size:0.82rem;'>{flt}</span>"
+            f"<span style='color:#64748B;min-width:64px;display:inline-block;font-size:0.78rem;'>{route}</span>"
+            f"<span style='color:{color};min-width:62px;display:inline-block;font-size:0.78rem;font-weight:500;'>{status}</span>"
+            f"<span style='color:#94A3B8;min-width:38px;display:inline-block;font-size:0.76rem;font-family:var(--font-code);'>{delta}</span>"
+            f"<span style='color:#64748B;font-size:0.76rem;'>{note}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -232,7 +251,7 @@ with col_flights:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-header'>TRIAGE LOGIC</div>", unsafe_allow_html=True)
     st.markdown("""
-<div style='font-family:monospace;font-size:0.72rem;color:#64748B;line-height:1.7;'>
+<div style='font-family:var(--font-code);font-size:0.73rem;color:#64748B;line-height:1.8;background:#F8FAFC;border-radius:6px;padding:8px 10px;'>
 slack = window &minus; move_time<br>
 &nbsp;&nbsp;Zone&nbsp;B&nbsp;(8&nbsp;min)&nbsp;→&nbsp;slack&nbsp;+17&nbsp;✓<br>
 &nbsp;&nbsp;Zone&nbsp;D&nbsp;(26&nbsp;min)&nbsp;→&nbsp;slack&nbsp;&minus;1&nbsp;✗<br>
@@ -253,10 +272,10 @@ no contention → route all
     ]
     for tier, tool, color, desc in tiers:
         st.markdown(
-            f"<div style='display:flex;gap:8px;align-items:center;margin:3px 0;font-family:monospace;font-size:0.72rem;'>"
-            f"<span style='color:{color};min-width:24px;'>{tier}</span>"
-            f"<span style='color:{color};min-width:52px;'>{tool}</span>"
-            f"<span style='color:#64748B;'>{desc}</span>"
+            f"<div style='display:flex;gap:8px;align-items:center;margin:4px 0;'>"
+            f"<span style='font-family:var(--font-code);color:{color};font-size:0.73rem;min-width:24px;font-weight:600;'>{tier}</span>"
+            f"<span style='font-family:var(--font-code);color:{color};font-size:0.73rem;min-width:54px;'>{tool}</span>"
+            f"<span style='font-family:var(--font-ui);color:#64748B;font-size:0.78rem;'>{desc}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -269,7 +288,7 @@ with col_log:
     if not st.session_state.running and not st.session_state.done:
         if not api_ok:
             st.markdown(
-                "<div style='color:#EA580C;font-family:monospace;font-size:0.8rem;'>⚠ API OFFLINE"
+                "<div style='color:#EA580C;font-family:inherit;font-size:0.8rem;'>⚠ API OFFLINE"
                 f" — {API}</div>",
                 unsafe_allow_html=True,
             )
@@ -291,7 +310,7 @@ with col_log:
                     st.rerun()
         with info_col:
             st.markdown(
-                "<div style='font-family:monospace;font-size:0.72rem;color:#64748B;padding-top:8px;'>"
+                "<div style='font-family:inherit;font-size:0.72rem;color:#64748B;padding-top:8px;'>"
                 "3 DELAY EVENTS → KAFKA<br>"
                 "WORKER → TRIAGE → CP-SAT<br>"
                 "ACTIONS → AUDIT TOPIC"
@@ -300,7 +319,7 @@ with col_log:
             )
 
         st.markdown(
-            "<div style='color:#E2E8F0;font-family:monospace;font-size:0.75rem;margin-top:24px;text-align:center;'>"
+            "<div style='color:#E2E8F0;font-family:inherit;font-size:0.75rem;margin-top:24px;text-align:center;'>"
             "— awaiting scenario trigger —"
             "</div>",
             unsafe_allow_html=True,
@@ -308,7 +327,7 @@ with col_log:
 
     elif st.session_state.running:
         st.markdown(
-            "<div style='color:#0066CC;font-family:monospace;font-size:0.78rem;'>⚡ PROCESSING — KAFKA → AGENTS → AUDIT</div>",
+            "<div style='color:#0066CC;font-family:inherit;font-size:0.78rem;'>⚡ PROCESSING — KAFKA → AGENTS → AUDIT</div>",
             unsafe_allow_html=True,
         )
         progress_slot = st.empty()
@@ -337,7 +356,7 @@ with col_log:
                 html_log = "\n".join(lines) if lines else "<div class='log-action'>waiting for first Kafka message...</div>"
                 timeline_slot.markdown(html_log, unsafe_allow_html=True)
                 progress_slot.markdown(
-                    f"<div style='font-family:monospace;font-size:0.72rem;color:#64748B;'>"
+                    f"<div style='font-family:inherit;font-size:0.72rem;color:#64748B;'>"
                     f"ACTIONS: {state.get('action_count',0)} &nbsp;|&nbsp; "
                     f"<span style='color:#16A34A;'>CONFIRMED: {state.get('saved_count',0)}</span> &nbsp;|&nbsp; "
                     f"<span style='color:#DC2626;'>MISSED: {state.get('missed_count',0)}</span>"
@@ -425,10 +444,10 @@ with col_bags:
             chip = f"<span class='bag-at-risk'>AT RISK</span>"
 
         st.markdown(
-            f"<div style='display:flex;align-items:center;gap:6px;padding:3px 0;font-family:monospace;font-size:0.72rem;'>"
-            f"<span style='color:#0066CC;min-width:52px;'>{tag}</span>"
-            f"<span style='color:#64748B;min-width:44px;'>{zone}</span>"
-            f"<span style='color:#94A3B8;min-width:30px;'>slk{slack}</span>"
+            f"<div style='display:flex;align-items:center;gap:8px;padding:4px 0;'>"
+            f"<span style='font-family:var(--font-code);color:#0066CC;font-size:0.75rem;min-width:56px;font-weight:500;'>{tag}</span>"
+            f"<span style='font-family:var(--font-ui);color:#64748B;font-size:0.75rem;min-width:48px;'>{zone}</span>"
+            f"<span style='font-family:var(--font-code);color:#94A3B8;font-size:0.72rem;min-width:36px;'>slk{slack}</span>"
             f"{chip}"
             f"</div>",
             unsafe_allow_html=True,
@@ -444,7 +463,7 @@ with col_bags:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         st.markdown("<div class='section-header'>OUTCOME</div>", unsafe_allow_html=True)
         st.markdown(
-            f"<div style='font-family:monospace;font-size:0.8rem;'>"
+            f"<div style='font-family:inherit;font-size:0.8rem;'>"
             f"<span style='color:#16A34A;'>✓ {len(saved)} CONFIRMED</span><br>"
             f"<span style='color:#DC2626;'>✗ {len(missed)} MISSED</span><br>"
             f"<span style='color:#0066CC;'>📱 {len(notifs)} NOTIFIED</span><br>"
@@ -461,7 +480,7 @@ with col_bags:
                 t = n.get("type", "")
                 color = type_color.get(t, "#64748B")
                 st.markdown(
-                    f"<div style='font-family:monospace;font-size:0.7rem;color:{color};'>"
+                    f"<div style='font-family:inherit;font-size:0.7rem;color:{color};'>"
                     f"{t[:3]}  {n['passenger_id']}  {n['bag_tag']}"
                     f"</div>",
                     unsafe_allow_html=True,
@@ -501,7 +520,7 @@ with bot2:
             ("W8", "Network cascade → joint CP-SAT",  "✓"),
         ]:
             st.markdown(
-                f"<div style='font-family:monospace;font-size:0.72rem;color:#64748B;'>"
+                f"<div style='font-family:inherit;font-size:0.72rem;color:#64748B;'>"
                 f"<span style='color:#16A34A;'>{status}</span> {w}: {label}</div>",
                 unsafe_allow_html=True,
             )
@@ -519,13 +538,13 @@ with bot3:
         ]
         for tech, role in stack:
             st.markdown(
-                f"<div style='font-family:monospace;font-size:0.72rem;'>"
+                f"<div style='font-family:inherit;font-size:0.72rem;'>"
                 f"<span style='color:#0066CC;'>{tech}</span>"
                 f"<span style='color:#94A3B8;'> — {role}</span></div>",
                 unsafe_allow_html=True,
             )
         st.markdown(
-            "<div style='font-family:monospace;font-size:0.7rem;color:#64748B;margin-top:8px;'>"
+            "<div style='font-family:inherit;font-size:0.7rem;color:#64748B;margin-top:8px;'>"
             "Measured: +40% recovery vs manual baseline<br>"
             "2.5s decision vs ~3 min manual<br>"
             "83 tests · 8 workflows · all deterministic"
@@ -535,7 +554,7 @@ with bot3:
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(
-    "<div style='text-align:center;color:#E2E8F0;font-family:monospace;font-size:0.65rem;padding:8px 0;'>"
+    "<div style='text-align:center;color:#E2E8F0;font-family:inherit;font-size:0.65rem;padding:8px 0;'>"
     "dCortex · Operational Superintelligence for Airlines · JFK Hub Demo"
     "</div>",
     unsafe_allow_html=True,
