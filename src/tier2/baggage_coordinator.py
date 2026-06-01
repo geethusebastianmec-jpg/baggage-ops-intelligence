@@ -137,15 +137,19 @@ def triage_and_optimize(state: BaggageCoordinatorState) -> dict[str, Any]:
     used_optimizer = False
     if recoverable and has_contention(len(recoverable), available_crew):
         capacity = simultaneous_capacity(available_crew)
-        bags_for_opt = [
-            BagForOptimization(
+        bags_for_opt = []
+        from src.tools import store as _store
+        for tag in recoverable:
+            conn = next((c for c in at_risk if c["bag_tag"] == tag), {})
+            slack = window - conn.get("move_time_minutes", 8)
+            # Use IATA-aligned priority from the bag's ticket class and FF tier
+            bag_obj = _store.BAGS.get(tag)
+            priority = bag_obj.priority_weight if bag_obj else 1.0
+            bags_for_opt.append(BagForOptimization(
                 bag_tag=tag,
-                slack_minutes=window - next(
-                    (c.get("move_time_minutes", 8) for c in at_risk if c["bag_tag"] == tag), 8
-                ),
-            )
-            for tag in recoverable
-        ]
+                slack_minutes=slack,
+                priority_weight=priority,
+            ))
         optimal_subset = solve_contended(bags_for_opt, crew_capacity=capacity)
         # Bags not in the optimal subset are deferred to next flight
         deferred = [t for t in recoverable if t not in optimal_subset]

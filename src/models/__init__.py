@@ -1,5 +1,8 @@
 from .flight import Flight, FlightStatus, DelayReason, DelayEvent, GateChangeEvent, CancellationEvent, GateInfo
-from .bag import Bag, BagStatus, TransferConnection, ExceptionTicket, LoadPlan, ExceptionType
+from .bag import (
+    Bag, BagStatus, TransferConnection, ExceptionTicket, LoadPlan, ExceptionType,
+    TicketClass, FrequentFlyerTier, bag_priority_weight, PRIORITY_WEIGHTS,
+)
 from .events import (
     DisruptionEvent, DisruptionType, Severity,
     AgentDecision, ActionRecord,
@@ -11,6 +14,7 @@ __all__ = [
     "Flight", "FlightStatus", "DelayReason", "DelayEvent",
     "GateChangeEvent", "CancellationEvent", "GateInfo",
     "Bag", "BagStatus", "TransferConnection", "ExceptionTicket", "LoadPlan", "ExceptionType",
+    "TicketClass", "FrequentFlyerTier", "bag_priority_weight", "PRIORITY_WEIGHTS",
     "DisruptionEvent", "DisruptionType", "Severity",
     "AgentDecision", "ActionRecord",
     "CrewStatus", "TaskTicket",

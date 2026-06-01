@@ -19,6 +19,7 @@ from datetime import datetime, timezone, timedelta
 from src.tools import store
 from src.models import (
     Bag, BagStatus, Flight, FlightStatus, LoadPlan, TransferConnection, CrewStatus,
+    TicketClass, FrequentFlyerTier,
 )
 from src.solver.rerouter import FlightLeg
 
@@ -102,19 +103,21 @@ def load(now: datetime | None = None) -> None:
     # BA-006..007 are in Zone D (deep queue):  move_time=26, slack = 25-26 = -1 → UNRECOVERABLE
     # Outcome is determined by deterministic triage, not an LLM.
 
+    # Realistic passenger mix for AA401 → AA501 (Zone B bags)
+    # IATA priority order: CREW > FIRST > BUSINESS > ECONOMY (elite > standard)
     aa401_bags_zone_b = [
-        ("BA-001", "P101", "Emma Wilson"),
-        ("BA-002", "P102", "James Chen"),
-        ("BA-003", "P103", "Sofia Martinez"),
-        ("BA-004", "P104", "Oliver Brown"),
-        ("BA-005", "P105", "Isabella Johnson"),
+        ("BA-001", "P101", "Capt. Rachel Moore",   TicketClass.CREW,     FrequentFlyerTier.NONE),
+        ("BA-002", "P102", "James Chen",            TicketClass.FIRST,    FrequentFlyerTier.PLATINUM),
+        ("BA-003", "P103", "Sofia Martinez",        TicketClass.BUSINESS, FrequentFlyerTier.GOLD),
+        ("BA-004", "P104", "Oliver Brown",          TicketClass.BUSINESS, FrequentFlyerTier.NONE),
+        ("BA-005", "P105", "Isabella Johnson",      TicketClass.ECONOMY,  FrequentFlyerTier.SILVER),
     ]
-    for tag, pid, name in aa401_bags_zone_b:
+    for tag, pid, name, tclass, ff in aa401_bags_zone_b:
         store.BAGS[tag] = Bag(
             bag_tag=tag, passenger_id=pid, passenger_name=name,
             origin_flight="AA401", destination_flight="AA501",
             final_destination="LHR", current_location="BHS_ZONE_B",
-            weight_kg=22.0,
+            weight_kg=22.0, ticket_class=tclass, frequent_flyer_tier=ff,
         )
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
@@ -127,15 +130,15 @@ def load(now: datetime | None = None) -> None:
         )]
 
     aa401_bags_zone_d = [
-        ("BA-006", "P106", "Noah Davis"),
-        ("BA-007", "P107", "Mia Thompson"),
+        ("BA-006", "P106", "Noah Davis",   TicketClass.ECONOMY, FrequentFlyerTier.NONE),
+        ("BA-007", "P107", "Mia Thompson", TicketClass.ECONOMY, FrequentFlyerTier.NONE),
     ]
-    for tag, pid, name in aa401_bags_zone_d:
+    for tag, pid, name, tclass, ff in aa401_bags_zone_d:
         store.BAGS[tag] = Bag(
             bag_tag=tag, passenger_id=pid, passenger_name=name,
             origin_flight="AA401", destination_flight="AA501",
             final_destination="LHR", current_location="BHS_ZONE_D",
-            weight_kg=22.0,
+            weight_kg=22.0, ticket_class=tclass, frequent_flyer_tier=ff,
         )
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
@@ -151,16 +154,16 @@ def load(now: datetime | None = None) -> None:
     # Window: 25 min. Zone B bags: move_time=8, slack=+17 → RECOVERABLE
 
     aa402_bags = [
-        ("BA-008", "P201", "Liam Anderson"),
-        ("BA-009", "P202", "Ava Thomas"),
-        ("BA-010", "P203", "Ethan Jackson"),
+        ("BA-008", "P201", "Liam Anderson", TicketClass.FIRST,    FrequentFlyerTier.NONE),
+        ("BA-009", "P202", "Ava Thomas",    TicketClass.BUSINESS, FrequentFlyerTier.GOLD),
+        ("BA-010", "P203", "Ethan Jackson", TicketClass.ECONOMY,  FrequentFlyerTier.NONE),
     ]
-    for tag, pid, name in aa402_bags:
+    for tag, pid, name, tclass, ff in aa402_bags:
         store.BAGS[tag] = Bag(
             bag_tag=tag, passenger_id=pid, passenger_name=name,
             origin_flight="AA402", destination_flight="AA501",
             final_destination="LHR", current_location="BHS_ZONE_B",
-            weight_kg=19.0,
+            weight_kg=19.0, ticket_class=tclass, frequent_flyer_tier=ff,
         )
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,

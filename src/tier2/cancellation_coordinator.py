@@ -111,8 +111,8 @@ def rebook_bags(state: CancellationCoordinatorState) -> dict[str, Any]:
                 bag_tag=tag,
                 passenger_id=bag.passenger_id,
                 destination=bag.final_destination or "",
-                priority=1.0,          # can be elevated for VIP in production
-                earliest_ready_minutes=30,  # processing time before bag is ready
+                priority=bag.priority_weight,  # IATA-aligned: CREW=3.0, FIRST=2.4+, etc.
+                earliest_ready_minutes=30,
             ))
 
     rebooked: dict[str, str] = {}

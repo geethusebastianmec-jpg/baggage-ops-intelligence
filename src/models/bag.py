@@ -28,6 +28,45 @@ class ExceptionType(str, Enum):
     WEIGHT_ISSUE = "WEIGHT_ISSUE"
 
 
+class TicketClass(str, Enum):
+    CREW     = "CREW"       # Deadheading / positioning crew — IATA Priority 1
+    FIRST    = "FIRST"      # First class — IATA Priority 2
+    BUSINESS = "BUSINESS"   # Business class — IATA Priority 2
+    ECONOMY  = "ECONOMY"    # Economy — IATA Priority 3
+
+
+class FrequentFlyerTier(str, Enum):
+    NONE     = "NONE"
+    SILVER   = "SILVER"
+    GOLD     = "GOLD"
+    PLATINUM = "PLATINUM"
+
+
+# IATA-aligned priority weights used by CP-SAT (T2a) and MIP rerouter (T2b).
+# Crew bags have the highest priority in IATA standard; within Economy,
+# frequent flyer tier adds a small lift.
+PRIORITY_WEIGHTS: dict[tuple[str, str], float] = {
+    (TicketClass.CREW,     FrequentFlyerTier.NONE):     3.0,
+    (TicketClass.FIRST,    FrequentFlyerTier.PLATINUM):  2.8,
+    (TicketClass.FIRST,    FrequentFlyerTier.GOLD):      2.6,
+    (TicketClass.FIRST,    FrequentFlyerTier.SILVER):    2.5,
+    (TicketClass.FIRST,    FrequentFlyerTier.NONE):      2.4,
+    (TicketClass.BUSINESS, FrequentFlyerTier.PLATINUM):  2.2,
+    (TicketClass.BUSINESS, FrequentFlyerTier.GOLD):      2.1,
+    (TicketClass.BUSINESS, FrequentFlyerTier.SILVER):    2.0,
+    (TicketClass.BUSINESS, FrequentFlyerTier.NONE):      1.9,
+    (TicketClass.ECONOMY,  FrequentFlyerTier.PLATINUM):  1.5,
+    (TicketClass.ECONOMY,  FrequentFlyerTier.GOLD):      1.3,
+    (TicketClass.ECONOMY,  FrequentFlyerTier.SILVER):    1.2,
+    (TicketClass.ECONOMY,  FrequentFlyerTier.NONE):      1.0,
+}
+
+
+def bag_priority_weight(ticket_class: str, ff_tier: str) -> float:
+    """Return the IATA-aligned numeric priority weight for CP-SAT / MIP."""
+    return PRIORITY_WEIGHTS.get((ticket_class, ff_tier), 1.0)
+
+
 class Bag(BaseModel):
     bag_tag: str
     passenger_id: str
@@ -39,6 +78,13 @@ class Bag(BaseModel):
     current_location: str = ""
     weight_kg: float = 20.0
     last_scanned_at: datetime = Field(default_factory=_utcnow)
+    # Passenger profile — drives IATA priority in CP-SAT and MIP
+    ticket_class: TicketClass = TicketClass.ECONOMY
+    frequent_flyer_tier: FrequentFlyerTier = FrequentFlyerTier.NONE
+
+    @property
+    def priority_weight(self) -> float:
+        return bag_priority_weight(self.ticket_class, self.frequent_flyer_tier)
 
 
 class TransferConnection(BaseModel):
