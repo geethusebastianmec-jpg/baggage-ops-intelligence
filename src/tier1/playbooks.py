@@ -56,6 +56,18 @@ def _loading_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]
     }
 
 
+def _cascade_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
+    """Multiple delayed inbounds → joint optimisation across all their bags."""
+    base = {"disruption_id": event.event_id, "actions_taken": []}
+    return {
+        "network_cascade_coordinator": {
+            **base,
+            "affected_inbound_flights": event.payload.get("affected_flights",
+                                                           event.affected_flights),
+        },
+    }
+
+
 def _equipment_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
     base = {"disruption_id": event.event_id, "actions_taken": []}
     return {
@@ -126,6 +138,18 @@ PLAYBOOKS: list[Playbook] = [
         condition=lambda e: e.event_type == DisruptionType.EQUIPMENT_FAILURE,
         severity_threshold=Severity.MEDIUM,
         build_inputs=_equipment_failure_inputs,
+    ),
+    Playbook(
+        name="NETWORK_CASCADE",
+        activate=["network_cascade_coordinator"],
+        # Fires when a COMPOUND event carries multiple affected flights
+        # (hub bank cascades: N inbounds all delayed, same outbound bank at risk)
+        condition=lambda e: (
+            e.event_type == DisruptionType.COMPOUND
+            and len(e.affected_flights) >= 2
+        ),
+        severity_threshold=Severity.CRITICAL,
+        build_inputs=_cascade_inputs,
     ),
 ]
 

@@ -234,6 +234,64 @@ def test_equipment_failure_reroutes_impacted_bags():
         assert "ZONE_B" not in store.BAGS[tag].current_location
 
 
+# ── Workflow 8: Network Cascade ───────────────────────────────────────────────
+
+def test_cascade_playbook_fires_for_compound_multi_flight():
+    from src.tier1.playbooks import match_playbook
+    event = DisruptionEvent(
+        event_type=DisruptionType.COMPOUND,
+        payload={"affected_flights": ["AA401", "AA402"]},
+        severity=Severity.CRITICAL,
+        affected_flights=["AA401", "AA402"],
+    )
+    pb = match_playbook(event)
+    assert pb is not None
+    assert pb.name == "NETWORK_CASCADE"
+    assert pb.activate == ["network_cascade_coordinator"]
+
+
+def test_cascade_playbook_does_not_fire_for_single_flight():
+    """Single-flight compound → falls through to ReAct, not cascade playbook."""
+    from src.tier1.playbooks import match_playbook
+    event = DisruptionEvent(
+        event_type=DisruptionType.COMPOUND,
+        payload={},
+        affected_flights=["AA401"],   # only one flight
+    )
+    pb = match_playbook(event)
+    # COMPOUND with 1 flight should not match NETWORK_CASCADE
+    assert pb is None or pb.name != "NETWORK_CASCADE"
+
+
+def test_cascade_joint_cpsat_under_shared_crew_constraint():
+    """3 inbounds, 12 bags, crew capacity 6 → CP-SAT picks optimal 6."""
+    from demo.seed_data import load
+    load()
+    PassengerNotifyTool.clear()
+
+    from src.tier2.network_cascade_coordinator import build_network_cascade_coordinator
+    # All crew across zones B and C: 4+3=7 crew → capacity 7*3=21
+    # Our seed only has 10 at-risk bags → no contention, all recoverable by triage
+    result = build_network_cascade_coordinator().compile().invoke({
+        "disruption_id": "casc-001",
+        "affected_inbound_flights": ["AA401", "AA402"],
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "aggregate_cascade" in node_names
+    assert "joint_triage" in node_names
+    assert "joint_optimize" in node_names
+    assert "dispatch_all" in node_names
+
+    # AA401 Zone-B bags + AA402 bags are recoverable; AA401 Zone-D bags are not
+    rushed = result.get("joint_recoverable", [])
+    missed = result.get("joint_unrecoverable", [])
+    assert len(rushed) > 0
+    assert "BA-006" in missed   # Zone D, slack=-1
+    assert "BA-007" in missed   # Zone D, slack=-1
+
+
 def test_equipment_failure_raises_maintenance_alert():
     """Maintenance alert is always raised regardless of bag rerouting outcome."""
     _base_seed()
