@@ -12,6 +12,7 @@ class BagStatus(str, Enum):
     CHECKED_IN = "CHECKED_IN"
     IN_TRANSIT = "IN_TRANSIT"
     LOADED = "LOADED"
+    CONFIRMED_LOADED = "CONFIRMED_LOADED"   # confirming scan received — bag physically on aircraft
     DELIVERED = "DELIVERED"
     EXCEPTION = "EXCEPTION"
     OFFLOADED = "OFFLOADED"

@@ -80,3 +80,46 @@ class BHSTool(BaseTool):
         store.BAGS[bag_tag] = bag.model_copy(update={"status": BagStatus.MISSED})
         store.ACTION_LOG.append({"tool": self.name, "action": "mark_bag_missed", "bag_tag": bag_tag})
         return True
+
+    def confirm_bag_loaded(self, bag_tag: str, flight_id: str) -> bool:
+        """Confirming scan — bag physically scanned onto the outbound aircraft.
+
+        In production this is triggered by an actual BHS scan event arriving after
+        the bag is loaded. In the demo it is called explicitly after route_bags
+        to simulate a successful load confirmation.
+        """
+        self._latency()
+        bag = store.BAGS.get(bag_tag)
+        if not bag:
+            return False
+        store.BAGS[bag_tag] = bag.model_copy(
+            update={"status": BagStatus.CONFIRMED_LOADED,
+                    "current_location": f"HOLD_{flight_id}"}
+        )
+        store.ACTION_LOG.append({
+            "tool": self.name,
+            "action": "confirm_bag_loaded",
+            "bag_tag": bag_tag,
+            "flight_id": flight_id,
+        })
+        return True
+
+    def divert_to_gate(self, bag_tags: list[str], new_gate: str, new_chute: str = "") -> bool:
+        """Re-route bags to a different gate chute in the BHS (gate change scenario)."""
+        self._latency()
+        if self._should_fail():
+            return False
+        location = new_chute or f"CHUTE_{new_gate}"
+        for tag in bag_tags:
+            bag = store.BAGS.get(tag)
+            if bag:
+                store.BAGS[tag] = bag.model_copy(
+                    update={"status": BagStatus.IN_TRANSIT, "current_location": location}
+                )
+        store.ACTION_LOG.append({
+            "tool": self.name,
+            "action": "divert_to_gate",
+            "bag_tags": bag_tags,
+            "new_gate": new_gate,
+        })
+        return True

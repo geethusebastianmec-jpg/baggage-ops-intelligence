@@ -34,13 +34,14 @@ def test_scenario_aa401_partial():
     assert set(baggage["unrecoverable_bag_tags"]) == {"BA-006", "BA-007"}
 
     for tag in ["BA-001", "BA-002", "BA-003", "BA-004", "BA-005"]:
-        assert store.BAGS[tag].status == BagStatus.EXCEPTION
+        assert store.BAGS[tag].status == BagStatus.CONFIRMED_LOADED
     for tag in ["BA-006", "BA-007"]:
         assert store.BAGS[tag].status == BagStatus.MISSED
 
     sent = PassengerNotifyTool.get_sent()
     assert len([n for n in sent if n["type"] == "MISSED"]) == 2
     assert len([n for n in sent if n["type"] == "AT_RISK"]) == 5
+    assert len([n for n in sent if n["type"] == "RECOVERED"]) == 5
 
 
 def test_scenario_aa402_recoverable():
@@ -60,11 +61,12 @@ def test_scenario_aa402_recoverable():
     baggage = result["coordinator_results"].get("baggage_coordinator", {})
     assert baggage.get("feasibility_verdict") == "RECOVERABLE"
     for tag in ["BA-008", "BA-009", "BA-010"]:
-        assert store.BAGS[tag].status == BagStatus.EXCEPTION
+        assert store.BAGS[tag].status == BagStatus.CONFIRMED_LOADED
 
     sent = PassengerNotifyTool.get_sent()
-    assert len(sent) == 3
-    assert all(n["type"] == "AT_RISK" for n in sent)
+    # AT_RISK sent when routing opened, RECOVERED sent after confirming scan
+    assert len([n for n in sent if n["type"] == "AT_RISK"]) == 3
+    assert len([n for n in sent if n["type"] == "RECOVERED"]) == 3
 
 
 def test_scenario_aa403_no_action():

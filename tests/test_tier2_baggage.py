@@ -123,19 +123,22 @@ def test_partial_scenario_deterministic():
     assert set(result["unrecoverable_bag_tags"]) == {"BA-006", "BA-007"}
 
     for tag in ["BA-001", "BA-002", "BA-003", "BA-004", "BA-005"]:
-        assert store.BAGS[tag].status == BagStatus.EXCEPTION
+        assert store.BAGS[tag].status == BagStatus.CONFIRMED_LOADED
     for tag in ["BA-006", "BA-007"]:
         assert store.BAGS[tag].status == BagStatus.MISSED
 
     sent = PassengerNotifyTool.get_sent()
     at_risk = [n for n in sent if n["type"] == "AT_RISK"]
     missed = [n for n in sent if n["type"] == "MISSED"]
-    assert len(at_risk) == 5
-    assert len(missed) == 2
+    recovered = [n for n in sent if n["type"] == "RECOVERED"]
+    assert len(at_risk) == 5      # sent when exception routing opens
+    assert len(missed) == 2       # sent for Zone D bags
+    assert len(recovered) == 5    # sent after confirming scan
 
     # No LLM call — triage is deterministic
     node_names = [a["node"] for a in result["actions_taken"]]
     assert "triage_and_optimize" in node_names
+    assert "close_loop" in node_names
 
 
 def test_unrecoverable_when_window_too_short():
@@ -173,7 +176,9 @@ def test_all_recoverable_when_window_generous():
     assert result["unrecoverable_bag_tags"] == []
 
     sent = PassengerNotifyTool.get_sent()
-    assert all(n["type"] == "AT_RISK" for n in sent)
+    # AT_RISK when routing opens; RECOVERED after confirming scan
+    assert len([n for n in sent if n["type"] == "AT_RISK"]) == 7
+    assert len([n for n in sent if n["type"] == "RECOVERED"]) == 7
 
 
 def test_no_at_risk_bags_short_circuits():

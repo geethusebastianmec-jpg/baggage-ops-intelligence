@@ -230,6 +230,45 @@ def route_bags(state: BaggageCoordinatorState) -> dict[str, Any]:
     }]}
 
 
+def close_loop(state: BaggageCoordinatorState) -> dict[str, Any]:
+    """Confirming scan simulation — marks rushed bags as CONFIRMED_LOADED.
+
+    In production: listens for actual BHS scan events confirming bags
+    were physically loaded onto the outbound aircraft. Triggers RECOVERED
+    passenger notification only when the scan arrives.
+
+    In the demo: simulates immediate confirmation for bags that were rushed
+    (they had positive slack, so the ramp crew made it in time).
+    """
+    recoverable = state.get("recoverable_bag_tags", [])
+    outbound = state.get("outbound_flight", "")
+    if not recoverable or not outbound:
+        return {"actions_taken": [{"node": "close_loop", "result": "No bags to confirm"}]}
+
+    confirmed = []
+    notified = []
+    from src.tools import store
+    for tag in recoverable:
+        # Only confirm bags that are in EXCEPTION status (were rushed)
+        bag = store.BAGS.get(tag)
+        if bag and bag.status.value == "EXCEPTION":
+            if _bhs.confirm_bag_loaded(tag, outbound):
+                confirmed.append(tag)
+                _notify.notify_bag_recovered(bag.passenger_id, tag)
+                notified.append(bag.passenger_id)
+
+    return {"actions_taken": [{
+        "node": "close_loop",
+        "tool": "bhs+passenger_notify",
+        "result": (
+            f"Confirming scan: {len(confirmed)}/{len(recoverable)} bags confirmed loaded on {outbound}. "
+            f"{len(notified)} passengers notified (RECOVERED)."
+        ),
+        "confirmed_bags": confirmed,
+        "passengers_notified": notified,
+    }]}
+
+
 def flag_missed(state: BaggageCoordinatorState) -> dict[str, Any]:
     """Mark unrecoverable bags as missed and notify passengers."""
     unrecoverable = state.get("unrecoverable_bag_tags", [])
@@ -273,6 +312,7 @@ def build_baggage_coordinator() -> StateGraph:
     graph.add_node("fetch_ramp", fetch_ramp)
     graph.add_node("triage_and_optimize", triage_and_optimize)
     graph.add_node("route_bags", route_bags)
+    graph.add_node("close_loop", close_loop)
     graph.add_node("flag_missed", flag_missed)
 
     graph.add_edge(START, "prepare_context")
@@ -281,7 +321,9 @@ def build_baggage_coordinator() -> StateGraph:
     graph.add_edge("fetch_departure", "triage_and_optimize")
     graph.add_edge("fetch_ramp", "triage_and_optimize")
     graph.add_conditional_edges("triage_and_optimize", _branch)
-    graph.add_edge("route_bags", END)
+    # route_bags → close_loop (confirming scan closes the feedback loop)
+    graph.add_edge("route_bags", "close_loop")
+    graph.add_edge("close_loop", END)
     graph.add_edge("flag_missed", END)
 
     return graph
