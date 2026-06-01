@@ -100,7 +100,8 @@ def rebook_bags(state: CancellationCoordinatorState) -> dict[str, Any]:
     from src.solver.rerouter import reroute_missed_bags, BagForRerouting
 
     flight_id = state["flight_id"]
-    all_tags = state.get("all_bag_tags", [])
+    # Only rebook UNLOADED bags — loaded bags are handled by offload_loaded
+    all_tags = state.get("unloaded_bag_tags", state.get("all_bag_tags", []))
 
     # Build BagForRerouting objects
     bags_to_reroute: list[BagForRerouting] = []

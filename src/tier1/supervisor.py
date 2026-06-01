@@ -37,6 +37,7 @@ from src.tier2.equipment_coordinator import build_equipment_coordinator
 from src.tier2.network_cascade_coordinator import build_network_cascade_coordinator
 from src.tier2.cancellation_coordinator import build_cancellation_coordinator
 from src.tier2.security_hold_coordinator import build_security_hold_coordinator
+from src.tier2.interline_coordinator import build_interline_coordinator
 
 _COORDINATOR_BUILDERS = {
     "baggage_coordinator": build_baggage_coordinator,
@@ -49,6 +50,7 @@ _COORDINATOR_BUILDERS = {
     "network_cascade_coordinator": build_network_cascade_coordinator,
     "cancellation_coordinator": build_cancellation_coordinator,
     "security_hold_coordinator": build_security_hold_coordinator,
+    "interline_coordinator": build_interline_coordinator,
 }
 
 _CONFLICT_PAIRS = {

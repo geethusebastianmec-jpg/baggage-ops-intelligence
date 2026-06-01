@@ -62,12 +62,31 @@ class ActionRecord(BaseModel):
     duration_ms: int = 0
 
 
+class GroundHandler(str, Enum):
+    """Who physically operates the ramp at this zone.
+
+    AIRLINE  — airline's own ramp crew (direct control, real-time dispatch)
+    SWISSPORT, MENZIES, DNATA, OTHER — outsourced GSP.
+
+    When a GSP operates the zone, task assignment goes through the GSP's own
+    dispatch system (different API, different response time, no guaranteed SLA
+    for exception tasks without prior contract terms).
+    """
+    AIRLINE   = "AIRLINE"
+    SWISSPORT = "SWISSPORT"
+    MENZIES   = "MENZIES"
+    DNATA     = "DNATA"
+    OTHER     = "OTHER"
+
+
 class CrewStatus(BaseModel):
     zone: str
     available_crew: int
     total_crew: int
     active_tasks: int
     can_take_exception: bool
+    # Who operates this zone — affects whether we can dispatch directly or via GSP API
+    handler: GroundHandler = GroundHandler.AIRLINE
 
     @property
     def utilization(self) -> float:

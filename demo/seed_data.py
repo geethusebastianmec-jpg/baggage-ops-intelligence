@@ -19,7 +19,7 @@ from datetime import datetime, timezone, timedelta
 from src.tools import store
 from src.models import (
     Bag, BagStatus, Flight, FlightStatus, LoadPlan, TransferConnection, CrewStatus,
-    TicketClass, FrequentFlyerTier,
+    TicketClass, FrequentFlyerTier, GroundHandler,
 )
 from src.solver.rerouter import FlightLeg
 
@@ -91,10 +91,12 @@ def load(now: datetime | None = None) -> None:
     store.CREW_STATUS["B"] = CrewStatus(
         zone="B", available_crew=4, total_crew=6,
         active_tasks=2, can_take_exception=True,
+        handler=GroundHandler.AIRLINE,      # JFK Terminal B — airline-operated
     )
     store.CREW_STATUS["C"] = CrewStatus(
         zone="C", available_crew=3, total_crew=4,
         active_tasks=1, can_take_exception=True,
+        handler=GroundHandler.SWISSPORT,    # JFK Terminal C — Swissport GSP
     )
 
     # ── Bags: AA401 → AA501 (7 bags, all at risk) ─────────────────────────────
@@ -179,23 +181,29 @@ def load(now: datetime | None = None) -> None:
     # Window: 40 min. Zone C bags: move_time=10, slack=+30 → comfortable, not flagged
 
     aa403_bags = [
-        ("BA-011", "P301", "Charlotte Harris"),
-        ("BA-012", "P302", "Benjamin Lee"),
+        ("BA-011", "P301", "Charlotte Harris", TicketClass.BUSINESS, FrequentFlyerTier.SILVER, False, None),
+        ("BA-012", "P302", "Benjamin Lee",     TicketClass.ECONOMY,  FrequentFlyerTier.NONE,   False, None),
+        # Interline bags — AA403 inbound, connecting to a Lufthansa departure
+        # AA has no direct BHS control over LH ground operations at CDG
+        ("BA-013", "P303", "Hans Mueller",     TicketClass.FIRST,    FrequentFlyerTier.GOLD,   True,  "LH"),
+        ("BA-014", "P304", "Maria Schmidt",    TicketClass.ECONOMY,  FrequentFlyerTier.NONE,   True,  "LH"),
     ]
-    for tag, pid, name in aa403_bags:
+    for tag, pid, name, tclass, ff, interline, partner in aa403_bags:
         store.BAGS[tag] = Bag(
             bag_tag=tag, passenger_id=pid, passenger_name=name,
             origin_flight="AA403", destination_flight="AA502",
             final_destination="CDG", current_location="BHS_ZONE_C",
-            weight_kg=18.0,
+            weight_kg=18.0, ticket_class=tclass, frequent_flyer_tier=ff,
         )
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
             inbound_flight="AA403", outbound_flight="AA502",
             connection_window_minutes=40,
             minimum_connection_time=25,
-            move_time_minutes=10,      # Zone C — comfortable
+            move_time_minutes=10,
             is_at_risk=False,
+            is_interline=interline,      # on the connection, not the bag
+            partner_airline=partner,
         )]
 
     # ── 28 non-connecting bags on various flights ──────────────────────────────

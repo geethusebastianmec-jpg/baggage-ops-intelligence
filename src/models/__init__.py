@@ -6,7 +6,7 @@ from .bag import (
 from .events import (
     DisruptionEvent, DisruptionType, Severity,
     AgentDecision, ActionRecord,
-    CrewStatus, TaskTicket,
+    CrewStatus, TaskTicket, GroundHandler,
     FeasibilityVerdict, FeasibilityResult,
 )
 
@@ -17,6 +17,6 @@ __all__ = [
     "TicketClass", "FrequentFlyerTier", "bag_priority_weight", "PRIORITY_WEIGHTS",
     "DisruptionEvent", "DisruptionType", "Severity",
     "AgentDecision", "ActionRecord",
-    "CrewStatus", "TaskTicket",
+    "CrewStatus", "TaskTicket", "GroundHandler",
     "FeasibilityVerdict", "FeasibilityResult",
 ]

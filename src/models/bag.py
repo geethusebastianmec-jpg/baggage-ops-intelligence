@@ -97,6 +97,14 @@ class TransferConnection(BaseModel):
     minimum_connection_time: int
     is_at_risk: bool = False
     risk_reason: str | None = None
+    # Interline: bag is transferring between two different airlines.
+    # The system has no direct control over the receiving airline's BHS.
+    # Interline bags trigger the InterlineCoordinator workflow instead of
+    # the standard BaggageCoordinator, and are flagged for manual oversight
+    # even when slack is positive (no guaranteed automated handoff).
+    is_interline: bool = False
+    partner_airline: str | None = None   # IATA 2-letter code, e.g. "LH", "UA"
+
     # Physical time (minutes) for ramp crew to move this bag from its current
     # BHS zone to the outbound aircraft hold. Varies by airport zone:
     #   Zone B (near gate):   ~8 min

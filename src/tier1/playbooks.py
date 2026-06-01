@@ -25,8 +25,9 @@ def _delay_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
     delay_minutes = event.payload.get("delay_minutes", 0)
     base = {"disruption_id": event.event_id, "actions_taken": []}
     return {
-        "baggage_coordinator": {**base, "inbound_flight": flight_id, "delay_minutes": delay_minutes},
-        "ramp_coordinator": {**base, "from_flight": flight_id, "bag_tags": [], "to_flight": "", "zone": "B"},
+        "baggage_coordinator":  {**base, "inbound_flight": flight_id, "delay_minutes": delay_minutes},
+        "interline_coordinator": {**base, "inbound_flight": flight_id, "delay_minutes": delay_minutes},
+        "ramp_coordinator":     {**base, "from_flight": flight_id, "bag_tags": [], "to_flight": "", "zone": "B"},
         "dispatch_coordinator": {**base, "flight_id": flight_id, "recoverable_bag_count": 0},
     }
 
@@ -107,7 +108,7 @@ def _cancellation_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
 PLAYBOOKS: list[Playbook] = [
     Playbook(
         name="FLIGHT_DELAY_STANDARD",
-        activate=["baggage_coordinator", "ramp_coordinator"],
+        activate=["baggage_coordinator", "interline_coordinator", "ramp_coordinator"],
         condition=lambda e: (
             e.event_type == DisruptionType.FLIGHT_DELAY
             and e.payload.get("delay_minutes", 0) >= 10
@@ -117,7 +118,7 @@ PLAYBOOKS: list[Playbook] = [
     ),
     Playbook(
         name="FLIGHT_DELAY_CRITICAL",
-        activate=["baggage_coordinator", "ramp_coordinator", "dispatch_coordinator"],
+        activate=["baggage_coordinator", "interline_coordinator", "ramp_coordinator", "dispatch_coordinator"],
         condition=lambda e: (
             e.event_type == DisruptionType.FLIGHT_DELAY
             and e.payload.get("delay_minutes", 0) >= 30

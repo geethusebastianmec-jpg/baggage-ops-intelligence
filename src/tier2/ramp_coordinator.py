@@ -15,9 +15,12 @@ from typing import Any
 from langgraph.graph import StateGraph, START, END
 
 from src.tier2.state import RampCoordinatorState
+from src.models import GroundHandler
 from src.tools.ramp import RampTool
+from src.tools.gsp import GSPTool
 
 _ramp = RampTool()
+_gsp = GSPTool()
 
 # Simplified adjacency: which zones to try if primary is unavailable
 _ADJACENT_ZONES: dict[str, list[str]] = {
@@ -92,25 +95,46 @@ def pull_adjacent_crew(state: RampCoordinatorState) -> dict[str, Any]:
 
 
 def assign_task(state: RampCoordinatorState) -> dict[str, Any]:
+    """Assign exception task — routes to airline-direct or GSP dispatch based on zone handler."""
     bag_tags = state.get("bag_tags", [])
     from_flight = state.get("from_flight", "")
     to_flight = state.get("to_flight", "")
     zone = state.get("zone", "B")
 
-    ticket = _ramp.assign_exception_task(bag_tags, from_flight, to_flight, zone)
+    from src.tools import store
+    crew = store.CREW_STATUS.get(zone)
+    handler = crew.handler if crew else GroundHandler.AIRLINE
+
+    if handler == GroundHandler.AIRLINE:
+        # Direct airline ramp dispatch — fast, guaranteed SLA
+        ticket = _ramp.assign_exception_task(bag_tags, from_flight, to_flight, zone)
+        tool_used = "ramp_direct"
+    else:
+        # GSP-operated zone — submit request via GSP dispatch API
+        ticket = _gsp.request_exception_task(bag_tags, from_flight, to_flight, zone, handler)
+        tool_used = f"gsp_{handler.lower()}"
+
     if not ticket:
         return {
             "task_ticket": None,
-            "error": "Ramp crew unavailable — could not assign task",
-            "actions_taken": [{"node": "assign_task", "result": "FAILED: crew unavailable"}],
+            "error": f"{'Ramp' if handler == GroundHandler.AIRLINE else handler + ' GSP'} crew unavailable",
+            "actions_taken": [{
+                "node": "assign_task",
+                "result": f"FAILED: {'airline crew' if handler == GroundHandler.AIRLINE else handler + ' GSP'} unavailable in zone {zone}",
+            }],
         }
     return {
         "task_ticket": ticket.model_dump(),
         "actions_taken": [{
             "node": "assign_task",
-            "tool": "ramp",
-            "result": f"Task {ticket.ticket_id} assigned — ETA {ticket.eta_minutes} min",
+            "tool": tool_used,
+            "result": (
+                f"Task {ticket.ticket_id} assigned via "
+                f"{'airline-direct' if handler == GroundHandler.AIRLINE else handler + ' GSP'} "
+                f"— ETA {ticket.eta_minutes} min"
+            ),
             "ticket_id": ticket.ticket_id,
+            "handler": handler,
         }],
     }
 

@@ -91,15 +91,23 @@ def test_seed_data_loads_correctly():
     from demo.seed_data import load
     load()
     assert len(store.FLIGHTS) == 5
-    assert len([t for t, c in store.CONNECTIONS.items() if c]) == 12
+    assert len([t for t, c in store.CONNECTIONS.items() if c]) == 14  # +2 interline bags
     at_risk = [t for t, c in store.CONNECTIONS.items() if any(x.is_at_risk for x in c)]
     assert len(at_risk) == 10   # 7 AA401 + 3 AA402
     safe = [t for t, c in store.CONNECTIONS.items()
             if c and not any(x.is_at_risk for x in c)]
-    assert len(safe) == 2       # BA-011, BA-012 (AA403)
+    assert len(safe) == 4       # BA-011, BA-012, BA-013, BA-014 (AA403, including interline)
 
-    # Verify move times are set correctly in seed data
-    ba006_conn = store.CONNECTIONS["BA-006"][0]
-    assert ba006_conn.move_time_minutes == 26   # Zone D
-    ba001_conn = store.CONNECTIONS["BA-001"][0]
-    assert ba001_conn.move_time_minutes == 8    # Zone B
+    # Verify move times
+    assert store.CONNECTIONS["BA-006"][0].move_time_minutes == 26   # Zone D
+    assert store.CONNECTIONS["BA-001"][0].move_time_minutes == 8    # Zone B
+
+    # Verify interline flags on connections
+    assert store.CONNECTIONS["BA-013"][0].is_interline is True
+    assert store.CONNECTIONS["BA-013"][0].partner_airline == "LH"
+    assert store.CONNECTIONS["BA-001"][0].is_interline is False
+
+    # Verify IATA priority on bags
+    assert store.BAGS["BA-001"].ticket_class.value == "CREW"  # deadheading crew
+    assert store.BAGS["BA-002"].ticket_class.value == "FIRST"
+    assert store.BAGS["BA-001"].priority_weight == 3.0
