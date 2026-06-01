@@ -173,7 +173,10 @@ Against dCortex's implied scope for airline baggage coordination:
 | Crew bag priority (crew deadheads) | ❌ Not built — crew bags have highest IATA priority |
 | Revenue-class passenger priority | ❌ Only binary priority (1.0/2.0), not fare-class aware |
 | GSP (ground service provider) coordination | ❌ Not modelled — outsourced handling is a real constraint |
-| Interline bag coordination | ❌ Single-airline only; interline = 30% of mishandling |
+| Interline bag coordination | ✅ InterlineCoordinator: IATA Type B alert, transfer desk, partner notification |
+| GSP coordination | ✅ GSPTool: airline-direct vs Swissport/Menzies/dnata routing |
+| Crew bag priority (IATA P1) | ✅ TicketClass.CREW=3.0, FIRST=2.4+, BUSINESS=1.9+, ECONOMY=1.0 |
+| Revenue-class weighting | ✅ 13-entry PRIORITY_WEIGHTS table: ticket class × FF tier |
 | Weight & balance integration | ❌ Load plan is mocked; real W&B is a separate system |
 | Real BHS data feed | ❌ All tools are mocked — biggest production gap |
 | Aircraft turnaround (beyond bags) | ❌ Fueling, catering, cleaning are outside scope |
