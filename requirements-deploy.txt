@@ -3,6 +3,9 @@
 
 # Agent framework
 langgraph==0.2.70
+
+# Constraint solver (Tier 2 — CP-SAT for contended bag recovery)
+ortools
 langchain-google-genai==2.1.4
 langchain-core==0.3.65
 

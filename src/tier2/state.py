@@ -23,8 +23,9 @@ class BaggageCoordinatorState(TypedDict, total=False):
     departure_window_minutes: int    # minutes until outbound departs
     ramp_crew_available: bool        # True if crew can take exception task
     ramp_zone: str                   # zone identifier for ramp crew
+    ramp_available_crew: int         # number of available crew members (for CP-SAT capacity)
 
-    # ── Set by evaluate_feasibility node (LLM) ────────────────────────────────
+    # ── Set by triage_and_optimize node (Tier 1 + Tier 2) ────────────────────
     feasibility_verdict: str         # RECOVERABLE | PARTIAL | UNRECOVERABLE
     recoverable_bag_tags: list[str]
     unrecoverable_bag_tags: list[str]

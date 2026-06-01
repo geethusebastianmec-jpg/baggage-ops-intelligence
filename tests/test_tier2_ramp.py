@@ -72,18 +72,32 @@ def test_ramp_escalates_when_no_crew():
 
 # ── Dispatch Coordinator ─────────────────────────────────────────────────────
 
-def test_dispatch_holds_when_bags_recoverable():
-    """3 recoverable bags, 20-min window → HOLD."""
+def test_dispatch_holds_when_many_bags_recoverable():
+    """20 recoverable bags: 20 × $150 = $3,000 > 5-min hold × $500 = $2,500 → HOLD."""
     _seed_base()
     from src.tier2.dispatch_coordinator import build_dispatch_coordinator
     graph = build_dispatch_coordinator().compile()
     result = graph.invoke({
         "disruption_id": "d-003",
         "flight_id": "AA501",
-        "recoverable_bag_count": 3,
+        "recoverable_bag_count": 20,
         "actions_taken": [],
     })
     assert result["hold_decision"] == "HOLD"
+
+
+def test_dispatch_departs_when_few_bags_not_worth_holding():
+    """3 recoverable bags: 3 × $150 = $450 < 5-min hold × $500 = $2,500 → DEPART."""
+    _seed_base()
+    from src.tier2.dispatch_coordinator import build_dispatch_coordinator
+    graph = build_dispatch_coordinator().compile()
+    result = graph.invoke({
+        "disruption_id": "d-003b",
+        "flight_id": "AA501",
+        "recoverable_bag_count": 3,
+        "actions_taken": [],
+    })
+    assert result["hold_decision"] == "DEPART"
 
 
 def test_dispatch_departs_when_window_too_short():

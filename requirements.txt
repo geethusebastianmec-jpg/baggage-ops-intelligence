@@ -1,5 +1,8 @@
 # Agent framework
 langgraph==0.2.70
+
+# Constraint solver (Tier 2 — CP-SAT optimizer for contended bag recovery)
+ortools
 langgraph-supervisor==0.0.27
 langgraph-checkpoint-postgres==2.0.13
 

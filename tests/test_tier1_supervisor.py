@@ -123,50 +123,33 @@ def test_playbook_no_match_for_small_delay():
 
 # ── Supervisor integration tests ─────────────────────────────────────────────
 
-@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
-def test_supervisor_activates_coordinators_in_parallel(mock_anthropic):
-    """Playbook fires, both baggage and ramp coordinators run, results collected."""
+def test_supervisor_activates_coordinators_in_parallel():
+    """Playbook fires, coordinators run — no LLM mock needed (triage is deterministic)."""
     _seed()
-    mock_response = MagicMock()
-    mock_response.content = json.dumps({
-        "verdict": "UNRECOVERABLE",
-        "recoverable_bags": [],
-        "unrecoverable_bags": ["BA-001", "BA-002"],
-        "reasoning": "Window too short.",
-    })
-    mock_anthropic.return_value.invoke.return_value = mock_response
 
     from src.tier1.supervisor import StrategicSupervisor
-    sup = StrategicSupervisor()
-    event = DisruptionEvent(
+    result = StrategicSupervisor().process(DisruptionEvent(
         event_type=DisruptionType.FLIGHT_DELAY,
         payload={"flight_id": "AA401", "delay_minutes": 32},
         severity=Severity.HIGH,
         affected_flights=["AA401"],
-    )
-    result = sup.process(event)
+    ))
 
     assert result["mode"] == "PLAYBOOK"
     assert "baggage_coordinator" in result["coordinators_activated"]
     assert len(result["all_actions"]) > 0
     assert result["errors"] == {}
+    # Verify deterministic triage ran (not LLM)
+    triage_actions = [a for a in result["all_actions"] if a.get("node") == "triage_and_optimize"]
+    assert len(triage_actions) > 0
 
 
 @patch("src.tier1.supervisor.ChatGoogleGenerativeAI")
-@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
-def test_supervisor_react_for_unknown_event(mock_baggage_llm, mock_supervisor_llm):
-    """COMPOUND event hits ReAct path — supervisor reasons about activation."""
+def test_supervisor_react_for_unknown_event(mock_supervisor_llm):
+    """COMPOUND event hits ReAct path — supervisor LLM mocked; baggage coordinator is deterministic."""
     _seed()
 
-    # Baggage coordinator mock
-    bag_resp = MagicMock()
-    bag_resp.content = json.dumps({
-        "verdict": "UNRECOVERABLE", "recoverable_bags": [],
-        "unrecoverable_bags": [], "reasoning": "No bags.",
-    })
-    mock_baggage_llm.return_value.invoke.return_value = bag_resp
-
-    # Supervisor ReAct mock
+    # Only the supervisor's ReAct LLM needs mocking; baggage coordinator is deterministic
     sup_resp = MagicMock()
     sup_resp.content = json.dumps({
         "activate": ["baggage_coordinator", "comms_coordinator"],
@@ -189,23 +172,12 @@ def test_supervisor_react_for_unknown_event(mock_baggage_llm, mock_supervisor_ll
 
 
 @patch("src.tier1.supervisor.ChatGoogleGenerativeAI")
-@patch("src.tier2.baggage_coordinator.ChatGoogleGenerativeAI")
-@patch("src.tier2.dispatch_coordinator.ChatGoogleGenerativeAI")
-def test_supervisor_detects_hold_depart_conflict(mock_dispatch_llm, mock_bag_llm, mock_sup_llm):
+def test_supervisor_detects_hold_depart_conflict(mock_sup_llm):
     """When baggage says HOLD and dispatch says DEPART, supervisor arbitrates."""
     _seed()
 
-    # Baggage: partial recovery (implies a hold request)
-    bag_resp = MagicMock()
-    bag_resp.content = json.dumps({
-        "verdict": "PARTIAL",
-        "recoverable_bags": ["BA-001"],
-        "unrecoverable_bags": ["BA-002"],
-        "reasoning": "BA-001 can make it with 2 more minutes.",
-    })
-    mock_bag_llm.return_value.invoke.return_value = bag_resp
-
-    # Supervisor arbitration mock
+    # Baggage coordinator is now deterministic — no mock needed.
+    # Supervisor arbitration mock (only the conflict resolution LLM is needed)
     arb_resp = MagicMock()
     arb_resp.content = json.dumps({
         "resolution": "HOLD",

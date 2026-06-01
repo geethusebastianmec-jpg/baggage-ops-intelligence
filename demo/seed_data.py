@@ -84,19 +84,19 @@ def load(now: datetime | None = None) -> None:
     )
 
     # ── Bags: AA401 → AA501 (7 bags, all at risk) ─────────────────────────────
-    # Connection window: ~25 min outbound - 32 min delay = window breached
-    # Ramp can recover 5 quickly; 2 are too far in BHS queue
+    # Departure window for AA501: 25 min from now.
+    # BA-001..005 are in Zone B (near gate): move_time=8, slack = 25-8 = +17 → RECOVERABLE
+    # BA-006..007 are in Zone D (deep queue):  move_time=26, slack = 25-26 = -1 → UNRECOVERABLE
+    # Outcome is determined by deterministic triage, not an LLM.
 
-    aa401_bags = [
+    aa401_bags_zone_b = [
         ("BA-001", "P101", "Emma Wilson"),
         ("BA-002", "P102", "James Chen"),
         ("BA-003", "P103", "Sofia Martinez"),
         ("BA-004", "P104", "Oliver Brown"),
         ("BA-005", "P105", "Isabella Johnson"),
-        ("BA-006", "P106", "Noah Davis"),
-        ("BA-007", "P107", "Mia Thompson"),
     ]
-    for tag, pid, name in aa401_bags:
+    for tag, pid, name in aa401_bags_zone_b:
         store.BAGS[tag] = Bag(
             bag_tag=tag, passenger_id=pid, passenger_name=name,
             origin_flight="AA401", destination_flight="AA501",
@@ -106,14 +106,36 @@ def load(now: datetime | None = None) -> None:
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
             inbound_flight="AA401", outbound_flight="AA501",
-            connection_window_minutes=max(0, 25 - 32),  # breached (-7 min)
+            connection_window_minutes=25,
             minimum_connection_time=25,
+            move_time_minutes=8,       # Zone B — near gate, 8-min sprint
             is_at_risk=True,
-            risk_reason="AA401 delayed 32 min, window to AA501 breached by 7 min",
+            risk_reason="AA401 delayed 32 min",
+        )]
+
+    aa401_bags_zone_d = [
+        ("BA-006", "P106", "Noah Davis"),
+        ("BA-007", "P107", "Mia Thompson"),
+    ]
+    for tag, pid, name in aa401_bags_zone_d:
+        store.BAGS[tag] = Bag(
+            bag_tag=tag, passenger_id=pid, passenger_name=name,
+            origin_flight="AA401", destination_flight="AA501",
+            final_destination="LHR", current_location="BHS_ZONE_D",
+            weight_kg=22.0,
+        )
+        store.CONNECTIONS[tag] = [TransferConnection(
+            bag_tag=tag, passenger_id=pid,
+            inbound_flight="AA401", outbound_flight="AA501",
+            connection_window_minutes=25,
+            minimum_connection_time=25,
+            move_time_minutes=26,      # Zone D — deep BHS queue, 26-min tug run
+            is_at_risk=True,
+            risk_reason="AA401 delayed 32 min — Zone D bags physically impossible",
         )]
 
     # ── Bags: AA402 → AA501 (3 bags, at risk but recoverable) ─────────────────
-    # Window: 25 - 18 = 7 min remaining (< 25 MCT but exception routing saves them)
+    # Window: 25 min. Zone B bags: move_time=8, slack=+17 → RECOVERABLE
 
     aa402_bags = [
         ("BA-008", "P201", "Liam Anderson"),
@@ -130,14 +152,15 @@ def load(now: datetime | None = None) -> None:
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
             inbound_flight="AA402", outbound_flight="AA501",
-            connection_window_minutes=7,
+            connection_window_minutes=25,
             minimum_connection_time=25,
+            move_time_minutes=8,       # Zone B — recoverable
             is_at_risk=True,
-            risk_reason="AA402 delayed 18 min, only 7 min remaining to AA501",
+            risk_reason="AA402 delayed 18 min",
         )]
 
     # ── Bags: AA403 → AA502 (2 bags, NOT at risk — sufficient window) ──────────
-    # Window: 40 - 11 = 29 min remaining (> 25 MCT — comfortable)
+    # Window: 40 min. Zone C bags: move_time=10, slack=+30 → comfortable, not flagged
 
     aa403_bags = [
         ("BA-011", "P301", "Charlotte Harris"),
@@ -153,9 +176,10 @@ def load(now: datetime | None = None) -> None:
         store.CONNECTIONS[tag] = [TransferConnection(
             bag_tag=tag, passenger_id=pid,
             inbound_flight="AA403", outbound_flight="AA502",
-            connection_window_minutes=29,
+            connection_window_minutes=40,
             minimum_connection_time=25,
-            is_at_risk=False,  # safe
+            move_time_minutes=10,      # Zone C — comfortable
+            is_at_risk=False,
         )]
 
     # ── 28 non-connecting bags on various flights ──────────────────────────────
