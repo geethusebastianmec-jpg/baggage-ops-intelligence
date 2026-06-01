@@ -292,6 +292,154 @@ def test_cascade_joint_cpsat_under_shared_crew_constraint():
     assert "BA-007" in missed   # Zone D, slack=-1
 
 
+# ── Workflow 6: Crew Shortage ─────────────────────────────────────────────────
+
+def test_ramp_pulls_adjacent_crew_when_primary_zone_empty():
+    """Zone B has no crew → pulls from adjacent Zone C before escalating."""
+    store.reset()
+    PassengerNotifyTool.clear()
+    # Zone B empty, Zone C has crew
+    store.CREW_STATUS["B"] = CrewStatus(
+        zone="B", available_crew=0, total_crew=5, active_tasks=5, can_take_exception=False
+    )
+    store.CREW_STATUS["C"] = CrewStatus(
+        zone="C", available_crew=3, total_crew=4, active_tasks=0, can_take_exception=True
+    )
+
+    from src.tier2.ramp_coordinator import build_ramp_coordinator
+    result = build_ramp_coordinator().compile().invoke({
+        "disruption_id": "d-w6-001",
+        "bag_tags": ["BA-001"],
+        "from_flight": "AA401",
+        "to_flight": "AA501",
+        "zone": "B",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "pull_adjacent_crew" in node_names
+    assert "escalate" not in node_names
+    assert result.get("task_ticket") is not None
+
+
+def test_ramp_escalates_when_all_zones_empty():
+    """No crew anywhere → escalates to AOCC supervisor."""
+    store.reset()
+    for z in ["A", "B", "C", "D"]:
+        store.CREW_STATUS[z] = CrewStatus(
+            zone=z, available_crew=0, total_crew=5, active_tasks=5, can_take_exception=False
+        )
+
+    from src.tier2.ramp_coordinator import build_ramp_coordinator
+    result = build_ramp_coordinator().compile().invoke({
+        "disruption_id": "d-w6-002",
+        "bag_tags": ["BA-001"],
+        "from_flight": "AA401",
+        "to_flight": "AA501",
+        "zone": "B",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "escalate" in node_names
+    assert result.get("task_ticket") is None
+
+
+# ── Workflow 3: Cancellation (full) ──────────────────────────────────────────
+
+def test_cancellation_playbook_routes_to_cancellation_coordinator():
+    from src.tier1.playbooks import match_playbook
+    event = DisruptionEvent(
+        event_type=DisruptionType.CANCELLATION,
+        payload={"flight_id": "AA401", "reason": "MECHANICAL"},
+        severity=Severity.CRITICAL,
+        affected_flights=["AA401"],
+    )
+    pb = match_playbook(event)
+    assert pb is not None
+    assert pb.name == "CANCELLATION"
+    assert pb.activate == ["cancellation_coordinator"]
+    inputs = pb.build_inputs(event)
+    assert "cancellation_coordinator" in inputs
+    assert inputs["cancellation_coordinator"]["flight_id"] == "AA401"
+
+
+def test_cancellation_rebooks_bags_on_next_flight():
+    """Cancellation: all bags get rebooked on next available flight."""
+    _base_seed()
+    now = datetime.now(timezone.utc)
+    store.FLIGHTS["AA401"] = Flight(
+        flight_id="AA401", airline="AA", origin="ORD", destination="JFK",
+        scheduled_departure=now - timedelta(minutes=10),
+        estimated_departure=now, gate="B4", terminal="B",
+        status=FlightStatus.ON_TIME,
+    )
+    # Seed bags on the cancelled flight
+    for i, tag in enumerate(["BA-C1", "BA-C2"]):
+        store.BAGS[tag] = Bag(
+            bag_tag=tag, passenger_id=f"PC0{i}", passenger_name=f"Cancel Pax {i}",
+            origin_flight="AA401", destination_flight=None,
+            final_destination="LHR", current_location="BHS_ZONE_B",
+        )
+
+    from src.tier2.cancellation_coordinator import build_cancellation_coordinator
+    result = build_cancellation_coordinator().compile().invoke({
+        "disruption_id": "d-canc-001",
+        "flight_id": "AA401",
+        "reason": "MECHANICAL",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "find_all_bags" in node_names
+    assert "rebook_bags" in node_names
+    assert "notify_passengers" in node_names
+
+    # Bags should be rebooked (destination_flight updated)
+    rebooked = result.get("rebooked", {})
+    assert len(rebooked) >= 1
+
+    # Passengers notified
+    sent = PassengerNotifyTool.get_sent()
+    assert len([n for n in sent if n["type"] == "MISSED"]) >= 1
+
+
+def test_cancellation_offloads_already_loaded_bags():
+    """Bags already in the aircraft hold get an off-load task."""
+    _base_seed()
+    now = datetime.now(timezone.utc)
+    store.FLIGHTS["AA401"] = Flight(
+        flight_id="AA401", airline="AA", origin="ORD", destination="JFK",
+        scheduled_departure=now - timedelta(minutes=10),
+        estimated_departure=now, gate="B4", terminal="B",
+        status=FlightStatus.ON_TIME,
+    )
+    # One bag already loaded in hold
+    store.BAGS["BA-LOADED"] = Bag(
+        bag_tag="BA-LOADED", passenger_id="PL01", passenger_name="Loaded Pax",
+        origin_flight="AA401", destination_flight=None,
+        final_destination="LHR", current_location="HOLD_AA401",
+        status=BagStatus.LOADED,
+    )
+    store.LOAD_PLANS["AA401"] = LoadPlan(
+        flight_id="AA401", aircraft_type="B737",
+        max_weight_kg=15000.0, current_weight_kg=20.0, bag_count=1,
+    )
+
+    from src.tier2.cancellation_coordinator import build_cancellation_coordinator
+    result = build_cancellation_coordinator().compile().invoke({
+        "disruption_id": "d-canc-002",
+        "flight_id": "AA401",
+        "reason": "WEATHER",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "offload_loaded" in node_names
+    assert "BA-LOADED" in result.get("offloaded", [])
+    assert store.BAGS["BA-LOADED"].status == BagStatus.OFFLOADED
+
+
 def test_equipment_failure_raises_maintenance_alert():
     """Maintenance alert is always raised regardless of bag rerouting outcome."""
     _base_seed()

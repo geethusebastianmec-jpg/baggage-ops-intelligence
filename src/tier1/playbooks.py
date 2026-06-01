@@ -81,12 +81,13 @@ def _equipment_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any
 
 
 def _cancellation_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
-    flight_id = event.payload.get("flight_id", "")
     base = {"disruption_id": event.event_id, "actions_taken": []}
     return {
-        "baggage_coordinator": {**base, "inbound_flight": flight_id, "delay_minutes": 999},
-        "dispatch_coordinator": {**base, "flight_id": flight_id, "recoverable_bag_count": 0},
-        "comms_coordinator": {**base, "notifications": []},
+        "cancellation_coordinator": {
+            **base,
+            "flight_id": event.payload.get("flight_id", ""),
+            "reason": event.payload.get("reason", "UNKNOWN"),
+        },
     }
 
 
@@ -120,7 +121,7 @@ PLAYBOOKS: list[Playbook] = [
     ),
     Playbook(
         name="CANCELLATION",
-        activate=["baggage_coordinator", "dispatch_coordinator", "comms_coordinator"],
+        activate=["cancellation_coordinator"],
         condition=lambda e: e.event_type == DisruptionType.CANCELLATION,
         severity_threshold=Severity.CRITICAL,
         build_inputs=_cancellation_inputs,
