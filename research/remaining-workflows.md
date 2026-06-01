@@ -1,4 +1,4 @@
-# Remaining Workflows
+# Workflows — Status
 
 ## What a Workflow Is
 
@@ -6,18 +6,22 @@ A workflow is a predefined sequence of steps for a specific disruption type.
 The coordinator's job is: receive event → select workflow → execute workflow.
 The workflow contains the logic; the coordinator is just the runner.
 
-Current implementation has one complete workflow and several stubs:
+Current status:
 
 ```
-✅ IMPLEMENTED      Flight Delay → transfer misconnection recovery
-🟡 STUB ONLY        Gate Change, Cancellation (playbook fires, steps not built)
-❌ NOT STARTED      Equipment Failure, Loading Failure, Crew Shortage,
-                    Security Hold, Network Cascade, Compound
+✅ COMPLETE   W1: Flight Delay → transfer misconnection recovery (+ feedback loop)
+✅ COMPLETE   W2: Gate Change (bag divert + crew reassign)
+✅ COMPLETE   W4: Equipment Failure (reroute + maintenance alert + re-triage)
+✅ COMPLETE   W5: Loading Failure at Origin (emergency load or rebook)
+✅ COMPLETE   W8: Network Cascade (joint CP-SAT across multiple inbounds)
+🟡 PARTIAL    W3: Cancellation (bags flagged, no rebooking)
+❌ NOT BUILT  W6: Crew Shortage
+❌ NOT BUILT  W7: Security Hold
 ```
 
 ---
 
-## Workflow 1 — Flight Delay (✅ complete)
+## Workflow 1 — Flight Delay (✅ complete + feedback loop closed)
 
 **Trigger:** `FlightDelayed(flight_id, delay_minutes)`
 
@@ -36,21 +40,20 @@ Dispatch: exception routing + ramp task + AT_RISK notify (Tier 1)
 (Future) Wait for confirming scan — did the bag actually make it?
 ```
 
-**What's still missing from this workflow:**
-- The confirming scan / feedback loop (§6 in the field document). Right now the system
-  dispatches and assumes success. In production, it must listen for the scan event
-  that proves the bag was loaded.
+**Feedback loop:** `close_loop` node runs after `route_bags`. Calls
+`BHSTool.confirm_bag_loaded()` (simulated scan), marks bag as `CONFIRMED_LOADED`,
+sends `RECOVERED` notification. In production this node would be event-driven
+(waiting for a real BHS scan message) rather than calling it synchronously.
 
 ---
 
-## Workflow 2 — Gate Change (🟡 stub)
+## Workflow 2 — Gate Change (✅ complete)
 
 **Trigger:** `GateChanged(flight_id, old_gate, new_gate)`
 
-**What happens today:** Playbook fires → ramp + comms coordinators activate
-with empty inputs. Nothing actually moves.
+**Implemented in** `gate_change_coordinator.py`.
 
-**What the workflow should do:**
+**Steps implemented:**
 
 ```
 Identify bags already sorted to old_gate chute (Tier 0 BHS query)
@@ -76,7 +79,7 @@ Notify connecting passengers if new gate changes their walk time significantly (
 
 ---
 
-## Workflow 3 — Flight Cancellation (🟡 stub)
+## Workflow 3 — Flight Cancellation (🟡 partial)
 
 **Trigger:** `FlightCancelled(flight_id, reason)`
 
@@ -117,7 +120,7 @@ function — but not an LLM.
 
 ---
 
-## Workflow 4 — Equipment Failure (❌ not started)
+## Workflow 4 — Equipment Failure (✅ complete)
 
 **Trigger:** `EquipmentFailed(equipment_id, zone, failure_type)`
 
@@ -145,6 +148,8 @@ Dispatch manual handling crew for bags with no alternate path (Tier 1)
 Alert maintenance for equipment repair (Tier 1)
 ```
 
+**Implemented in** `equipment_coordinator.py`. `EQUIPMENT_FAILURE` playbook registered.
+
 **Why this is different from a delay:**
 A delay hits all bags on one inbound flight. An equipment failure hits all bags
 in a zone, regardless of which flight they came from. The trigger is physical
@@ -160,7 +165,7 @@ pre-computed as a lookup table (BHS topology is fixed). No LLM.
 
 ---
 
-## Workflow 5 — Loading Failure at Origin (❌ not started)
+## Workflow 5 — Loading Failure at Origin (✅ complete)
 
 **Trigger:** `BagNotLoaded(bag_tag, flight_id)` detected at departure
 
@@ -202,7 +207,11 @@ the AODB delay feed.
 
 ---
 
-## Workflow 6 — Ramp Crew Shortage (❌ not started)
+**Implemented in** `loading_failure_coordinator.py`. `BAG_NOT_LOADED` playbook registered.
+
+---
+
+## Workflow 6 — Ramp Crew Shortage (❌ not built)
 
 **Trigger:** `CrewShortage(zone, available_crew, required_crew)` or
 detected implicitly when RampCoordinator escalates repeatedly.
@@ -230,7 +239,7 @@ under new capacity. No LLM.
 
 ---
 
-## Workflow 7 — Security Hold on a Bag (❌ not started)
+## Workflow 7 — Security Hold on a Bag (❌ not built)
 
 **Trigger:** `SecurityHold(bag_tag, reason)` from CT scanner or TSA flag.
 
@@ -262,7 +271,7 @@ the bag from loading — not to make a creative decision about it.
 
 ---
 
-## Workflow 8 — Network Cascade Detection (❌ not started)
+## Workflow 8 — Network Cascade Detection (✅ complete)
 
 This is the most complex remaining workflow. It doesn't respond to a single event;
 it watches a pattern of events forming across the hub.
@@ -289,18 +298,13 @@ Assess: will holding the outbound cascade further delays downstream? (Tier 1)
 Dispatch coordinated plan (Tier 1)
 ```
 
+**Implemented in** `network_cascade_coordinator.py`. `NETWORK_CASCADE` playbook fires on
+`COMPOUND` events with ≥ 2 `affected_flights`.
+
 **Why this is not just three separate delay workflows:**
-Today the system runs three separate delay workflows in parallel (one per inbound).
-Each one thinks it has the full crew capacity. In reality they are competing for
-the same ramp crew. The CP-SAT in each coordinator sees only its own bags —
-not the other coordinators' bags.
-
-The network cascade workflow needs a cross-coordinator CP-SAT run that treats all
-competing bags as one joint optimisation problem.
-
-**Tier needed:** Tier 1 (cascade detection), Tier 2 (joint CP-SAT). This is the
-one workflow where the coordinator pattern from the field document (re-solve with
-removed options on failure) becomes most important.
+Separate per-inbound delay workflows each assume full crew capacity. In a cascade they
+compete for the same ramp crew. The joint CP-SAT run sees all bags and the true shared
+constraint, producing one feasible plan rather than N infeasible independent ones.
 
 ---
 
@@ -348,17 +352,25 @@ combine for a situation that could not be pre-written.
 
 ---
 
-## Build Order
+## Build Status
 
-Ranked by impact / feasibility:
-
-| Priority | Workflow | Why |
+| Workflow | Status | Coordinator |
 |---|---|---|
-| 1 | **Confirming scan feedback** (closes Workflow 1) | Without this, the system is guessing into the void. This is what makes it measurable. |
-| 2 | **Loading Failure (Workflow 5)** | Second biggest mishandling cause (16%). Different trigger but Tier 1 throughout. |
-| 3 | **Gate Change (Workflow 2)** | Playbook already exists, tools mostly there, just needs coordinator logic filled in. |
-| 4 | **Equipment Failure (Workflow 4)** | Needs BHS alternate path tool. Rest is Tier 1. |
-| 5 | **Network Cascade (Workflow 8)** | Needs joint CP-SAT across coordinators. Highest complexity but highest value. |
-| 6 | **Crew Shortage (Workflow 6)** | Partially handled via escalation today. Needs adjacent-zone crew pull. |
-| 7 | **Cancellation (Workflow 3)** | Needs rebooking tools (external system integration). |
-| 8 | **Security Hold (Workflow 7)** | Compliance workflow, mostly human-in-loop. Lower urgency. |
+| W1: Flight Delay + feedback loop | ✅ Complete | `baggage_coordinator` + `close_loop` |
+| W2: Gate Change | ✅ Complete | `gate_change_coordinator` |
+| W3: Cancellation | 🟡 Partial | `baggage_coordinator` (bags flagged, no rebooking) |
+| W4: Equipment Failure | ✅ Complete | `equipment_coordinator` |
+| W5: Loading Failure | ✅ Complete | `loading_failure_coordinator` |
+| W6: Crew Shortage | ❌ Not built | — |
+| W7: Security Hold | ❌ Not built | — |
+| W8: Network Cascade | ✅ Complete | `network_cascade_coordinator` |
+
+## Remaining Work
+
+| Item | What's needed |
+|---|---|
+| **Cancellation (W3) — full** | `schedule.find_next_flight()`, `reservation.rebook_passenger()`, physical off-load of already-loaded bags |
+| **Crew Shortage (W6)** | Adjacent-zone crew pull tool, `CREW_SHORTAGE` event type, new coordinator |
+| **Security Hold (W7)** | `SECURITY_HOLD` event type, coordinator (mostly compliance + human-in-loop) |
+| **Real data feed** | All workflows run on mock tools. Production value lands when real BHS scans and AODB events flow in. |
+| **Measurement** | Replay historical disruptions, count bags saved vs. manual baseline, measure decision latency |
