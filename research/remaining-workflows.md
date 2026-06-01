@@ -11,11 +11,11 @@ Current status:
 ```
 ✅ COMPLETE   W1: Flight Delay → transfer misconnection recovery (+ feedback loop)
 ✅ COMPLETE   W2: Gate Change (bag divert + crew reassign)
+✅ COMPLETE   W3: Cancellation (rebook + off-load + notify)
 ✅ COMPLETE   W4: Equipment Failure (reroute + maintenance alert + re-triage)
 ✅ COMPLETE   W5: Loading Failure at Origin (emergency load or rebook)
+✅ COMPLETE   W6: Crew Shortage (adjacent-zone crew pull)
 ✅ COMPLETE   W8: Network Cascade (joint CP-SAT across multiple inbounds)
-🟡 PARTIAL    W3: Cancellation (bags flagged, no rebooking)
-❌ NOT BUILT  W6: Crew Shortage
 ❌ NOT BUILT  W7: Security Hold
 ```
 
@@ -358,10 +358,10 @@ combine for a situation that could not be pre-written.
 |---|---|---|
 | W1: Flight Delay + feedback loop | ✅ Complete | `baggage_coordinator` + `close_loop` |
 | W2: Gate Change | ✅ Complete | `gate_change_coordinator` |
-| W3: Cancellation | 🟡 Partial | `baggage_coordinator` (bags flagged, no rebooking) |
+| W3: Cancellation | ✅ Complete | `cancellation_coordinator` (rebook + offload + notify) |
 | W4: Equipment Failure | ✅ Complete | `equipment_coordinator` |
 | W5: Loading Failure | ✅ Complete | `loading_failure_coordinator` |
-| W6: Crew Shortage | ❌ Not built | — |
+| W6: Crew Shortage | ✅ Complete | `ramp_coordinator` adjacent-zone pull |
 | W7: Security Hold | ❌ Not built | — |
 | W8: Network Cascade | ✅ Complete | `network_cascade_coordinator` |
 
@@ -369,8 +369,8 @@ combine for a situation that could not be pre-written.
 
 | Item | What's needed |
 |---|---|
-| **Cancellation (W3) — full** | `schedule.find_next_flight()`, `reservation.rebook_passenger()`, physical off-load of already-loaded bags |
-| **Crew Shortage (W6)** | Adjacent-zone crew pull tool, `CREW_SHORTAGE` event type, new coordinator |
+| **Cancellation (W3)** | ✅ Done — `cancellation_coordinator` with `ScheduleTool` |
+| **Crew Shortage (W6)** | ✅ Done — `ramp_coordinator` adjacent-zone pull |
 | **Security Hold (W7)** | `SECURITY_HOLD` event type, coordinator (mostly compliance + human-in-loop) |
 | **Real data feed** | All workflows run on mock tools. Production value lands when real BHS scans and AODB events flow in. |
 | **Measurement** | Replay historical disruptions, count bags saved vs. manual baseline, measure decision latency |

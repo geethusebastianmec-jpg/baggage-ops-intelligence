@@ -96,12 +96,12 @@ automatically — no human needed.
 | **Loading failure at origin** | ✅ Full | `loading_failure_coordinator`: locate bag → check flight at gate → emergency load if time permits, else rebook on next flight + MISSED notification. Covers 16% of mishandling. |
 | **BHS equipment failure** | ✅ Full | `equipment_coordinator`: identify impacted bags in failed zone, reroute to alternate BHS path, alert maintenance, re-run triage for newly at-risk bags. |
 | **Network cascade** | ✅ Full | `network_cascade_coordinator`: aggregates all at-risk bags across multiple simultaneous delayed inbounds, runs single joint CP-SAT under true shared crew constraint. Prevents N separate coordinators overpromising on the same crew. |
-| **Flight cancellation** | 🟡 Partial | All bags correctly flagged unrecoverable. Passenger notified. Rebooking on alternate flights and physical off-load of loaded bags not yet implemented. |
+| **Flight cancellation** | ✅ Full | `cancellation_coordinator`: find all bags → [rebook on next flight ‖ off-load bags already in hold] → MISSED + rebooking ETA notification to every passenger. |
 | **ATC / SLOT delay** | 🟡 Partial | Treated as a standard flight delay. Full delay pipeline runs. SLOT-specific ground stop windows not separately modelled. |
 | **Mechanical delay** | 🟡 Partial | Treated as a flight delay. Works for delays with known duration. Open-ended "unknown duration" mechanical holds not handled. |
 | **Compound / novel event** | 🟡 Partial | Gemini Pro selects which coordinators to activate. NETWORK_CASCADE playbook handles the most common compound case (multiple delayed inbounds). Truly novel situations use LLM routing. |
 | **Security hold on a bag** | ❌ Not yet | `ExceptionType.SECURITY_HOLD` exists in models. No coordinator, no event flow. |
-| **Ramp crew shortage** | ❌ Not yet | RampCoordinator escalates when no crew is available. No adjacent-zone crew pull or proactive crew sourcing. |
+| **Ramp crew shortage** | ✅ Full | `ramp_coordinator` upgraded: checks adjacent zones (B↔C↔D) before escalating. Logs original vs reassigned zone. Escalates to AOCC only when no crew in any adjacent zone. |
 
 ### Passenger notification lifecycle
 
@@ -262,12 +262,13 @@ baggage/
 │   │   ├── triage.py               Deterministic slack-based bag triage
 │   │   └── optimizer.py            OR-Tools CP-SAT for contended recovery
 │   ├── tier2/                      Domain coordinators (LangGraph DAGs)
-│   │   ├── baggage_coordinator.py       Delay: triage → CP-SAT → dispatch → close_loop
-│   │   ├── gate_change_coordinator.py   Gate change: divert bags + reassign crew
-│   │   ├── loading_failure_coordinator.py  Not loaded: emergency load or rebook
-│   │   ├── equipment_coordinator.py     Belt/scanner failure: reroute + alert
-│   │   ├── network_cascade_coordinator.py  Multi-inbound: joint CP-SAT
-│   │   ├── ramp_coordinator.py
+│   │   ├── baggage_coordinator.py         Delay: triage → CP-SAT → dispatch → close_loop
+│   │   ├── cancellation_coordinator.py    Cancellation: rebook + offload + notify
+│   │   ├── gate_change_coordinator.py     Gate change: divert bags + reassign crew
+│   │   ├── loading_failure_coordinator.py Not loaded: emergency load or rebook
+│   │   ├── equipment_coordinator.py       Belt/scanner: reroute + maintenance alert
+│   │   ├── network_cascade_coordinator.py Multi-inbound: joint CP-SAT
+│   │   ├── ramp_coordinator.py            Ramp: crew assign + adjacent-zone fallback
 │   │   ├── dispatch_coordinator.py
 │   │   └── comms_coordinator.py
 │   ├── tier1/                      Strategic Supervisor
@@ -306,7 +307,7 @@ baggage/
 python -m pytest tests/ -v
 ```
 
-75 tests, all passing. Deterministic logic (triage, tools, coordinators) needs no
+80 tests, all passing. Deterministic logic (triage, tools, coordinators) needs no
 mocking. The Strategic Supervisor's LLM path is mocked in the 3 tests that exercise
 novel-event and conflict-arbitration scenarios.
 
