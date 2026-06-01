@@ -33,48 +33,48 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── Aviation-grade CSS ─────────────────────────────────────────────────────────
+# ── Light theme CSS ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-  /* Global dark ops room feel */
-  .stApp { background-color: #0A0E1A; }
+  /* Global white background */
+  .stApp { background-color: #FFFFFF; }
 
   /* Flight status table rows */
   .flight-row { display:flex; align-items:center; padding:6px 10px; border-radius:4px; margin:2px 0; font-family:monospace; font-size:0.85rem; border-left:4px solid transparent; }
-  .flight-delayed  { background:#1C1008; border-left-color:#FF6D00; }
-  .flight-ok       { background:#071510; border-left-color:#00C853; }
-  .flight-critical { background:#1A0808; border-left-color:#D50000; }
+  .flight-delayed  { background:#FFF7ED; border-left-color:#EA580C; }
+  .flight-ok       { background:#F0FDF4; border-left-color:#16A34A; }
+  .flight-critical { background:#FEF2F2; border-left-color:#DC2626; }
 
   /* Bag status chips */
-  .bag-confirmed { background:#00C853; color:#000; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-missed    { background:#D50000; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-at-risk   { background:#FF6D00; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
-  .bag-safe      { background:#37474F; color:#90A4AE; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-confirmed { background:#16A34A; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-missed    { background:#DC2626; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-at-risk   { background:#EA580C; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
+  .bag-safe      { background:#E2E8F0; color:#64748B; padding:2px 8px; border-radius:10px; font-size:0.75rem; font-weight:bold; }
 
   /* Event log rows */
-  .log-event    { color:#00C8FF; font-family:monospace; font-size:0.78rem; padding:2px 0; }
-  .log-action   { color:#90A4AE; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-ok       { color:#00C853; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-warn     { color:#FF6D00; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
-  .log-critical { color:#D50000; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-event    { color:#0066CC; font-family:monospace; font-size:0.78rem; padding:2px 0; }
+  .log-action   { color:#64748B; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-ok       { color:#16A34A; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-warn     { color:#EA580C; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
+  .log-critical { color:#DC2626; font-family:monospace; font-size:0.78rem; padding:1px 0 1px 16px; }
 
   /* KPI cards */
-  .kpi-card { background:#111827; border:1px solid #1E293B; border-radius:8px; padding:12px 16px; text-align:center; }
+  .kpi-card { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 16px; text-align:center; }
   .kpi-number { font-size:2rem; font-weight:bold; line-height:1; }
-  .kpi-label  { font-size:0.72rem; color:#64748B; text-transform:uppercase; letter-spacing:0.08em; margin-top:4px; }
-  .kpi-green  { color:#00C853; }
-  .kpi-red    { color:#D50000; }
-  .kpi-amber  { color:#FF6D00; }
-  .kpi-blue   { color:#00C8FF; }
+  .kpi-label  { font-size:0.72rem; color:#94A3B8; text-transform:uppercase; letter-spacing:0.08em; margin-top:4px; }
+  .kpi-green  { color:#16A34A; }
+  .kpi-red    { color:#DC2626; }
+  .kpi-amber  { color:#EA580C; }
+  .kpi-blue   { color:#0066CC; }
 
   /* Section headers */
-  .section-header { font-family:monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#475569; border-bottom:1px solid #1E293B; padding-bottom:4px; margin-bottom:8px; }
+  .section-header { font-family:monospace; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.15em; color:#94A3B8; border-bottom:1px solid #E2E8F0; padding-bottom:4px; margin-bottom:8px; }
 
   /* Status pill */
-  .status-live { background:#00C853; color:#000; font-size:0.65rem; font-weight:bold; padding:2px 8px; border-radius:10px; }
-  .status-idle { background:#37474F; color:#90A4AE; font-size:0.65rem; padding:2px 8px; border-radius:10px; }
+  .status-live { background:#16A34A; color:#fff; font-size:0.65rem; font-weight:bold; padding:2px 8px; border-radius:10px; }
+  .status-idle { background:#E2E8F0; color:#94A3B8; font-size:0.65rem; padding:2px 8px; border-radius:10px; }
 
-  /* Hide Streamlit chrome for cleaner look */
+  /* Hide Streamlit chrome */
   #MainMenu { visibility:hidden; }
   footer { visibility:hidden; }
   .stDeployButton { display:none; }
@@ -156,7 +156,7 @@ h1, h2, h3 = st.columns([4, 2, 2])
 with h1:
     st.markdown(
         "### 🧳  BAGGAGE OPS INTELLIGENCE &nbsp; "
-        "<span style='color:#475569;font-size:0.8rem;font-weight:normal;'>by dCortex</span>",
+        "<span style='color:#64748B;font-size:0.8rem;font-weight:normal;'>by dCortex</span>",
         unsafe_allow_html=True,
     )
 with h2:
@@ -170,12 +170,12 @@ with h2:
                 unsafe_allow_html=True)
 with h3:
     st.markdown(
-        f"<div style='text-align:right;padding-top:8px;color:#475569;font-family:monospace;font-size:0.8rem;'>"
+        f"<div style='text-align:right;padding-top:8px;color:#64748B;font-family:monospace;font-size:0.8rem;'>"
         f"UTC {_utcnow()}</div>",
         unsafe_allow_html=True,
     )
 
-st.markdown("<hr style='border-color:#1E293B;margin:4px 0 12px 0;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#E2E8F0;margin:4px 0 12px 0;'>", unsafe_allow_html=True)
 
 # ── KPI strip ─────────────────────────────────────────────────────────────────
 k1, k2, k3, k4, k5, k6 = st.columns(6)
@@ -217,7 +217,7 @@ with col_flights:
     ]
 
     for flt, route, status, delta, note, css_class in flights:
-        color = "#FF6D00" if css_class == "delayed" else "#00C853"
+        color = "#EA580C" if css_class == "delayed" else "#16A34A"
         st.markdown(
             f"<div class='flight-row flight-{css_class}'>"
             f"<span style='color:{color};font-weight:bold;min-width:52px;display:inline-block;'>{flt}</span>"
@@ -232,7 +232,7 @@ with col_flights:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-header'>TRIAGE LOGIC</div>", unsafe_allow_html=True)
     st.markdown("""
-<div style='font-family:monospace;font-size:0.72rem;color:#475569;line-height:1.7;'>
+<div style='font-family:monospace;font-size:0.72rem;color:#64748B;line-height:1.7;'>
 slack = window &minus; move_time<br>
 &nbsp;&nbsp;Zone&nbsp;B&nbsp;(8&nbsp;min)&nbsp;→&nbsp;slack&nbsp;+17&nbsp;✓<br>
 &nbsp;&nbsp;Zone&nbsp;D&nbsp;(26&nbsp;min)&nbsp;→&nbsp;slack&nbsp;&minus;1&nbsp;✗<br>
@@ -245,9 +245,9 @@ no contention → route all
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-header'>TIER LADDER</div>", unsafe_allow_html=True)
     tiers = [
-        ("T0", "DB read", "#475569", "Where is bag X?"),
+        ("T0", "DB read", "#64748B", "Where is bag X?"),
         ("T1", "Rules", "#64748B", "Slack math · hold cost"),
-        ("T2", "CP-SAT", "#00C8FF", "Optimal subset under crew cap"),
+        ("T2", "CP-SAT", "#0066CC", "Optimal subset under crew cap"),
         ("T3", "Agent", "#7C3AED", "Sequences T1/T2"),
         ("T4", "LLM", "#F59E0B", "Novel events only"),
     ]
@@ -256,7 +256,7 @@ no contention → route all
             f"<div style='display:flex;gap:8px;align-items:center;margin:3px 0;font-family:monospace;font-size:0.72rem;'>"
             f"<span style='color:{color};min-width:24px;'>{tier}</span>"
             f"<span style='color:{color};min-width:52px;'>{tool}</span>"
-            f"<span style='color:#475569;'>{desc}</span>"
+            f"<span style='color:#64748B;'>{desc}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -269,7 +269,7 @@ with col_log:
     if not st.session_state.running and not st.session_state.done:
         if not api_ok:
             st.markdown(
-                "<div style='color:#FF6D00;font-family:monospace;font-size:0.8rem;'>⚠ API OFFLINE"
+                "<div style='color:#EA580C;font-family:monospace;font-size:0.8rem;'>⚠ API OFFLINE"
                 f" — {API}</div>",
                 unsafe_allow_html=True,
             )
@@ -291,7 +291,7 @@ with col_log:
                     st.rerun()
         with info_col:
             st.markdown(
-                "<div style='font-family:monospace;font-size:0.72rem;color:#475569;padding-top:8px;'>"
+                "<div style='font-family:monospace;font-size:0.72rem;color:#64748B;padding-top:8px;'>"
                 "3 DELAY EVENTS → KAFKA<br>"
                 "WORKER → TRIAGE → CP-SAT<br>"
                 "ACTIONS → AUDIT TOPIC"
@@ -300,7 +300,7 @@ with col_log:
             )
 
         st.markdown(
-            "<div style='color:#1E293B;font-family:monospace;font-size:0.75rem;margin-top:24px;text-align:center;'>"
+            "<div style='color:#E2E8F0;font-family:monospace;font-size:0.75rem;margin-top:24px;text-align:center;'>"
             "— awaiting scenario trigger —"
             "</div>",
             unsafe_allow_html=True,
@@ -308,7 +308,7 @@ with col_log:
 
     elif st.session_state.running:
         st.markdown(
-            "<div style='color:#00C8FF;font-family:monospace;font-size:0.78rem;'>⚡ PROCESSING — KAFKA → AGENTS → AUDIT</div>",
+            "<div style='color:#0066CC;font-family:monospace;font-size:0.78rem;'>⚡ PROCESSING — KAFKA → AGENTS → AUDIT</div>",
             unsafe_allow_html=True,
         )
         progress_slot = st.empty()
@@ -337,10 +337,10 @@ with col_log:
                 html_log = "\n".join(lines) if lines else "<div class='log-action'>waiting for first Kafka message...</div>"
                 timeline_slot.markdown(html_log, unsafe_allow_html=True)
                 progress_slot.markdown(
-                    f"<div style='font-family:monospace;font-size:0.72rem;color:#475569;'>"
+                    f"<div style='font-family:monospace;font-size:0.72rem;color:#64748B;'>"
                     f"ACTIONS: {state.get('action_count',0)} &nbsp;|&nbsp; "
-                    f"<span style='color:#00C853;'>CONFIRMED: {state.get('saved_count',0)}</span> &nbsp;|&nbsp; "
-                    f"<span style='color:#D50000;'>MISSED: {state.get('missed_count',0)}</span>"
+                    f"<span style='color:#16A34A;'>CONFIRMED: {state.get('saved_count',0)}</span> &nbsp;|&nbsp; "
+                    f"<span style='color:#DC2626;'>MISSED: {state.get('missed_count',0)}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -426,9 +426,9 @@ with col_bags:
 
         st.markdown(
             f"<div style='display:flex;align-items:center;gap:6px;padding:3px 0;font-family:monospace;font-size:0.72rem;'>"
-            f"<span style='color:#00C8FF;min-width:52px;'>{tag}</span>"
-            f"<span style='color:#475569;min-width:44px;'>{zone}</span>"
-            f"<span style='color:#334155;min-width:30px;'>slk{slack}</span>"
+            f"<span style='color:#0066CC;min-width:52px;'>{tag}</span>"
+            f"<span style='color:#64748B;min-width:44px;'>{zone}</span>"
+            f"<span style='color:#94A3B8;min-width:30px;'>slk{slack}</span>"
             f"{chip}"
             f"</div>",
             unsafe_allow_html=True,
@@ -445,9 +445,9 @@ with col_bags:
         st.markdown("<div class='section-header'>OUTCOME</div>", unsafe_allow_html=True)
         st.markdown(
             f"<div style='font-family:monospace;font-size:0.8rem;'>"
-            f"<span style='color:#00C853;'>✓ {len(saved)} CONFIRMED</span><br>"
-            f"<span style='color:#D50000;'>✗ {len(missed)} MISSED</span><br>"
-            f"<span style='color:#00C8FF;'>📱 {len(notifs)} NOTIFIED</span><br>"
+            f"<span style='color:#16A34A;'>✓ {len(saved)} CONFIRMED</span><br>"
+            f"<span style='color:#DC2626;'>✗ {len(missed)} MISSED</span><br>"
+            f"<span style='color:#0066CC;'>📱 {len(notifs)} NOTIFIED</span><br>"
             f"<span style='color:#64748B;'>RATE: {pct}%</span>"
             f"</div>",
             unsafe_allow_html=True,
@@ -456,7 +456,7 @@ with col_bags:
         if notifs:
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
             st.markdown("<div class='section-header'>NOTIFICATIONS</div>", unsafe_allow_html=True)
-            type_color = {"RECOVERED": "#00C853", "AT_RISK": "#FF6D00", "MISSED": "#D50000"}
+            type_color = {"RECOVERED": "#16A34A", "AT_RISK": "#EA580C", "MISSED": "#DC2626"}
             for n in notifs[-8:]:  # show last 8
                 t = n.get("type", "")
                 color = type_color.get(t, "#64748B")
@@ -469,7 +469,7 @@ with col_bags:
 
 
 # ── Bottom panels ──────────────────────────────────────────────────────────────
-st.markdown("<hr style='border-color:#1E293B;margin:12px 0;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border-color:#E2E8F0;margin:12px 0;'>", unsafe_allow_html=True)
 
 bot1, bot2, bot3 = st.columns([2, 2, 3])
 
@@ -501,8 +501,8 @@ with bot2:
             ("W8", "Network cascade → joint CP-SAT",  "✓"),
         ]:
             st.markdown(
-                f"<div style='font-family:monospace;font-size:0.72rem;color:#475569;'>"
-                f"<span style='color:#00C853;'>{status}</span> {w}: {label}</div>",
+                f"<div style='font-family:monospace;font-size:0.72rem;color:#64748B;'>"
+                f"<span style='color:#16A34A;'>{status}</span> {w}: {label}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -520,12 +520,12 @@ with bot3:
         for tech, role in stack:
             st.markdown(
                 f"<div style='font-family:monospace;font-size:0.72rem;'>"
-                f"<span style='color:#00C8FF;'>{tech}</span>"
-                f"<span style='color:#334155;'> — {role}</span></div>",
+                f"<span style='color:#0066CC;'>{tech}</span>"
+                f"<span style='color:#94A3B8;'> — {role}</span></div>",
                 unsafe_allow_html=True,
             )
         st.markdown(
-            "<div style='font-family:monospace;font-size:0.7rem;color:#475569;margin-top:8px;'>"
+            "<div style='font-family:monospace;font-size:0.7rem;color:#64748B;margin-top:8px;'>"
             "Measured: +40% recovery vs manual baseline<br>"
             "2.5s decision vs ~3 min manual<br>"
             "83 tests · 8 workflows · all deterministic"
@@ -535,7 +535,7 @@ with bot3:
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(
-    "<div style='text-align:center;color:#1E293B;font-family:monospace;font-size:0.65rem;padding:8px 0;'>"
+    "<div style='text-align:center;color:#E2E8F0;font-family:monospace;font-size:0.65rem;padding:8px 0;'>"
     "dCortex · Operational Superintelligence for Airlines · JFK Hub Demo"
     "</div>",
     unsafe_allow_html=True,
