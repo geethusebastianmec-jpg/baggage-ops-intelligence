@@ -15,6 +15,7 @@ class DisruptionType(str, Enum):
     CANCELLATION = "CANCELLATION"
     EQUIPMENT_FAILURE = "EQUIPMENT_FAILURE"
     BAG_NOT_LOADED = "BAG_NOT_LOADED"      # bag checked in but not physically loaded
+    SECURITY_HOLD = "SECURITY_HOLD"        # CT scanner or TSA flag on a bag
     TRANSFER_AT_RISK = "TRANSFER_AT_RISK"
     COMPOUND = "COMPOUND"
 

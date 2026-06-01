@@ -104,6 +104,43 @@ class BHSTool(BaseTool):
         })
         return True
 
+    def place_security_hold(self, bag_tag: str, reason: str) -> bool:
+        """Flag a bag as SECURITY_HOLD and pull it from the BHS queue.
+
+        The bag cannot be loaded until security clears it.
+        In production: sends a divert command to the BHS controller
+        and opens a compliance ticket in the security management system.
+        """
+        self._latency()
+        bag = store.BAGS.get(bag_tag)
+        if not bag:
+            return False
+        from src.models import ExceptionType
+        store.BAGS[bag_tag] = bag.model_copy(
+            update={"status": BagStatus.EXCEPTION, "current_location": "SECURITY_HOLD"}
+        )
+        store.ACTION_LOG.append({
+            "tool": self.name,
+            "action": "place_security_hold",
+            "bag_tag": bag_tag,
+            "reason": reason,
+            "exception_type": ExceptionType.SECURITY_HOLD,
+        })
+        return True
+
+    def clear_security_hold(self, bag_tag: str) -> bool:
+        """Mark a security hold as cleared — bag can now be rebooked."""
+        self._latency()
+        bag = store.BAGS.get(bag_tag)
+        if not bag:
+            return False
+        store.BAGS[bag_tag] = bag.model_copy(
+            update={"status": BagStatus.IN_TRANSIT, "current_location": "SECURITY_CLEARED"}
+        )
+        store.ACTION_LOG.append({"tool": self.name, "action": "clear_security_hold",
+                                 "bag_tag": bag_tag})
+        return True
+
     def divert_to_gate(self, bag_tags: list[str], new_gate: str, new_chute: str = "") -> bool:
         """Re-route bags to a different gate chute in the BHS (gate change scenario)."""
         self._latency()

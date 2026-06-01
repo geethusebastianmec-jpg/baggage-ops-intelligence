@@ -263,6 +263,87 @@ def test_cascade_playbook_does_not_fire_for_single_flight():
     assert pb is None or pb.name != "NETWORK_CASCADE"
 
 
+# ── Workflow 7: Security Hold ─────────────────────────────────────────────────
+
+def test_security_hold_playbook_routes_correctly():
+    from src.tier1.playbooks import match_playbook
+    event = DisruptionEvent(
+        event_type=DisruptionType.SECURITY_HOLD,
+        payload={"bag_tag": "BA-001", "flight_id": "AA501", "reason": "CT anomaly"},
+        severity=Severity.HIGH, affected_flights=["AA501"],
+    )
+    pb = match_playbook(event)
+    assert pb is not None
+    assert pb.name == "SECURITY_HOLD"
+    assert pb.activate == ["security_hold_coordinator"]
+    inputs = pb.build_inputs(event)
+    assert inputs["security_hold_coordinator"]["bag_tag"] == "BA-001"
+    assert inputs["security_hold_coordinator"]["hold_reason"] == "CT anomaly"
+
+
+def test_security_hold_cleared_rebooks_bag():
+    """Security clears bag → rebooked on next flight, passenger notified."""
+    _base_seed()
+    store.BAGS["BA-SEC1"] = Bag(
+        bag_tag="BA-SEC1", passenger_id="PS01", passenger_name="Security Pax",
+        origin_flight="AA401", destination_flight="AA501",
+        final_destination="LHR", current_location="SECURITY_SCREENING",
+    )
+
+    from src.tier2.security_hold_coordinator import build_security_hold_coordinator
+    result = build_security_hold_coordinator().compile().invoke({
+        "disruption_id": "d-sec-001",
+        "bag_tag": "BA-SEC1",
+        "flight_id": "AA501",
+        "hold_reason": "CT anomaly detected",
+        "simulated_outcome": "CLEARED",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "place_hold" in node_names
+    assert "notify_passenger" in node_names
+    assert "rebook_on_next_flight" in node_names
+    assert "escalate_to_authority" not in node_names
+    assert result.get("escalated") is False
+
+    # Bag should be cleared (not still on security hold)
+    assert store.BAGS["BA-SEC1"].status != BagStatus.EXCEPTION or \
+           store.BAGS["BA-SEC1"].current_location == "SECURITY_CLEARED"
+
+
+def test_security_hold_rejected_escalates():
+    """Security rejects bag → escalated to law enforcement, passenger notified of seizure."""
+    _base_seed()
+    store.BAGS["BA-SEC2"] = Bag(
+        bag_tag="BA-SEC2", passenger_id="PS02", passenger_name="Reject Pax",
+        origin_flight="AA401", destination_flight="AA501",
+        final_destination="LHR", current_location="SECURITY_SCREENING",
+    )
+
+    from src.tier2.security_hold_coordinator import build_security_hold_coordinator
+    result = build_security_hold_coordinator().compile().invoke({
+        "disruption_id": "d-sec-002",
+        "bag_tag": "BA-SEC2",
+        "flight_id": "AA501",
+        "hold_reason": "Prohibited item",
+        "simulated_outcome": "REJECTED",
+        "actions_taken": [],
+    })
+
+    node_names = [a["node"] for a in result["actions_taken"]]
+    assert "escalate_to_authority" in node_names
+    assert result.get("escalated") is True
+
+    # Check compliance log has the escalation
+    escalations = [a for a in store.ACTION_LOG
+                   if a.get("action") == "security_rejected_escalated"]
+    assert len(escalations) >= 1
+
+    sent = PassengerNotifyTool.get_sent()
+    assert any(n["bag_tag"] == "BA-SEC2" for n in sent)
+
+
 def test_cascade_joint_cpsat_under_shared_crew_constraint():
     """3 inbounds, 12 bags, crew capacity 6 → CP-SAT picks optimal 6."""
     from demo.seed_data import load

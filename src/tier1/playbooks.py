@@ -45,6 +45,19 @@ def _gate_change_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
     }
 
 
+def _security_hold_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
+    base = {"disruption_id": event.event_id, "actions_taken": []}
+    return {
+        "security_hold_coordinator": {
+            **base,
+            "bag_tag": event.payload.get("bag_tag", ""),
+            "flight_id": event.payload.get("flight_id", ""),
+            "hold_reason": event.payload.get("reason", "Security inspection required"),
+            "simulated_outcome": event.payload.get("outcome", "CLEARED"),
+        },
+    }
+
+
 def _loading_failure_inputs(event: DisruptionEvent) -> dict[str, dict[str, Any]]:
     base = {"disruption_id": event.event_id, "actions_taken": []}
     return {
@@ -125,6 +138,13 @@ PLAYBOOKS: list[Playbook] = [
         condition=lambda e: e.event_type == DisruptionType.CANCELLATION,
         severity_threshold=Severity.CRITICAL,
         build_inputs=_cancellation_inputs,
+    ),
+    Playbook(
+        name="SECURITY_HOLD",
+        activate=["security_hold_coordinator"],
+        condition=lambda e: e.event_type == DisruptionType.SECURITY_HOLD,
+        severity_threshold=Severity.HIGH,
+        build_inputs=_security_hold_inputs,
     ),
     Playbook(
         name="BAG_NOT_LOADED",
