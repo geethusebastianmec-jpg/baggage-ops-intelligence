@@ -50,6 +50,12 @@ class TransferConnection(BaseModel):
     minimum_connection_time: int
     is_at_risk: bool = False
     risk_reason: str | None = None
+    # Physical time (minutes) for ramp crew to move this bag from its current
+    # BHS zone to the outbound aircraft hold. Varies by airport zone:
+    #   Zone B (near gate):   ~8 min
+    #   Zone C (mid terminal): ~12 min
+    #   Zone D (far queue):   ~26 min
+    move_time_minutes: int = 8
 
     @property
     def slack_minutes(self) -> int:
